@@ -1,0 +1,29 @@
+---
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import TripSketcher from '@/components/TripSketcher.astro';
+import { getDestinations } from '@/lib/content';
+
+const destinations = await getDestinations();
+---
+
+<Base title="Sketch a route" description="Pick places on a map of Kenya, set your nights and send the route to Whizperz on WhatsApp.">
+  <PageHero
+    title="Draw the trip you have in mind."
+    kicker="Sketch a route"
+    intro="No forms to wade through. Pick the places, set the nights, and send it over. A real person replies with a plan."
+  />
+  <TripSketcher destinations={destinations} title="Your route" intro="Tap a place on the map or in the list. Use the arrows to change the order. Your route is saved on this device until you send it." />
+  <section class="section">
+    <div class="wrap faq">
+      <div>
+        <h2>What happens next</h2>
+      </div>
+      <ol class="itinerary" >
+        <li style="grid-template-columns:1fr"><div><h3>We read your route</h3><p>Usually within a day. If something won’t work, like a drive that’s too long, we’ll say so and suggest a better order.</p></div></li>
+        <li style="grid-template-columns:1fr"><div><h3>You get a plan and a price</h3><p>Stays, transport, park fees and a clear total, with options if you want to spend more or less.</p></div></li>
+        <li style="grid-template-columns:1fr"><div><h3>We fine-tune it together</h3><p>Change anything you like. Once you’re happy, we confirm the bookings and send payment details.</p></div></li>
+      </ol>
+    </div>
+  </section>
+</Base>

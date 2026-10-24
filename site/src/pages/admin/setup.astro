@@ -1,0 +1,74 @@
+---
+import Admin from '@/layouts/Admin.astro';
+import Logo from '@/components/Logo.astro';
+import { AdminError } from '@/lib/admin/users';
+import { isHttps, isLocalRequest, startSession, str } from '@/lib/admin/web';
+import { getRuntime } from '@/lib/server/payments';
+import { timingSafeEqual } from 'node:crypto';
+
+export const prerender = false;
+
+const rt = getRuntime();
+// ?recover lets someone with access to the server (or the setup key) get back in if every password is lost.
+const recovering = rt.users.hasUsers();
+if (recovering && !Astro.url.searchParams.has('recover')) return Astro.redirect('/admin/login/');
+
+// Creating the first admin is allowed from this computer, or anywhere with the setup key from the host's settings.
+const setupKey = process.env['ADMIN_SETUP_KEY']?.trim() ?? '';
+const local = isLocalRequest(Astro.request, Astro.clientAddress);
+const needsKey = !local;
+let error = '';
+let username = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  username = str(form, 'username');
+  const password = str(form, 'password');
+  const confirm = str(form, 'confirm');
+  const key = str(form, 'setupKey');
+  const keyOk = setupKey !== '' && key.length === setupKey.length && timingSafeEqual(Buffer.from(key), Buffer.from(setupKey));
+  if (needsKey && !keyOk) {
+    error = setupKey ? 'That setup key is wrong.' : 'Set ADMIN_SETUP_KEY in your hosting dashboard first (see below).';
+  } else if (password !== confirm) {
+    error = 'The two passwords don’t match.';
+  } else {
+    try {
+      const user = recovering && rt.users.get(username) ? rt.users.resetPassword(username, password) : rt.users.create(username, password);
+      startSession(Astro.cookies, rt.sessionKey, user, isHttps(Astro.request, Astro.url));
+      return Astro.redirect('/admin/settings/?welcome=1');
+    } catch (err) {
+      if (!(err instanceof AdminError)) throw err;
+      error = err.message;
+    }
+  }
+}
+---
+
+<Admin title={recovering ? 'Recover access' : 'Set up'} bare flash={error ? { kind: 'error', text: error } : undefined}>
+  <a class="brand" href="/"><Logo /><span class="brand-name">whizperz<small>Admin</small></span></a>
+  <div class="panel">
+    <h1>{recovering ? 'Recover access' : 'Welcome'}</h1>
+    <p class="hint" style="font-size:1rem">
+      {recovering
+        ? 'Type an existing username to give it a new password, or a new username to add an admin.'
+        : 'Create the first admin account. You’ll use it to make quotes, check payments, refund and change settings.'}
+    </p>
+    <form method="post" class="admin-form">
+      <label class="field">Username<input name="username" value={username} autocomplete="username" required minlength="3" maxlength="32" /></label>
+      <label class="field">Password<input name="password" type="password" autocomplete="new-password" required minlength="10" /><span class="hint">At least 10 characters.</span></label>
+      <label class="field">Password again<input name="confirm" type="password" autocomplete="new-password" required minlength="10" /></label>
+      {
+        needsKey && (
+          <label class="field">
+            Setup key
+            <input name="setupKey" type="password" autocomplete="off" required />
+            <span class="hint">
+              For safety, this can only be done on the server itself, or with a setup key. In your hosting dashboard, add an environment variable named <span class="code">ADMIN_SETUP_KEY</span> with any long secret, restart the site, then type the same secret here.
+            </span>
+          </label>
+        )
+      }
+      <button class="button" type="submit">{recovering ? 'Save and log in' : 'Create account'}</button>
+    </form>
+  </div>
+</Admin>

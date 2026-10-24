@@ -1,0 +1,168 @@
+import AxeBuilder from '@axe-core/playwright';
+import { test, expect, isMobile } from './fixtures';
+
+const destinations = ['maasai-mara', 'amboseli', 'tsavo', 'diani', 'laikipia', 'naivasha-nakuru', 'samburu', 'lamu'];
+const journeys = ['into-the-open', 'under-a-big-sky', 'saltwater-days', 'wild-to-blue', 'rift-and-water', 'laikipia-slow-days', 'north-country'];
+
+const pages = [
+  '/',
+  '/destinations/',
+  ...destinations.map((d) => `/destinations/${d}/`),
+  '/packages/',
+  ...journeys.map((j) => `/packages/${j}/`),
+  '/plan/',
+  '/gallery/',
+  '/about/',
+  '/faq/',
+  '/how-to-book/',
+  '/contact/',
+  '/privacy/',
+];
+
+test.describe('every page', () => {
+  for (const path of pages) {
+    test(`${path} loads cleanly`, async ({ page }) => {
+      const res = await page.goto(path);
+      expect(res?.status()).toBe(200);
+      await expect(page.locator('h1')).toHaveCount(1);
+      await expect(page).toHaveTitle(/Whizperz/);
+      await expect(page.locator('header .brand')).toBeVisible();
+      await expect(page.locator('footer')).toContainText('Whizperz Tours & Safaris');
+      // Every image says what it shows (or is marked decorative with alt="").
+      const missingAlt = await page.locator('img:not([alt])').count();
+      expect(missingAlt).toBe(0);
+    });
+  }
+
+  test('unknown pages return a friendly 404', async ({ page }) => {
+    const res = await page.goto('/no-such-page/');
+    expect(res?.status()).toBe(404);
+    await expect(page.locator('h1')).toHaveText('Wrong turn.');
+  });
+});
+
+test('every internal link on the site works', async ({ page, request }) => {
+  test.skip(await isMobile(page), 'Links are the same on mobile');
+  const seen = new Set<string>();
+  for (const path of ['/', '/destinations/', '/packages/', '/faq/', '/contact/', '/payments/']) {
+    await page.goto(path);
+    const hrefs = await page.locator('a[href^="/"]').evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).getAttribute('href')!));
+    hrefs.forEach((h) => seen.add(h.split('#')[0]!));
+  }
+  expect(seen.size).toBeGreaterThan(20);
+  for (const href of seen) {
+    const res = await request.get(href);
+    expect(res.status(), href).toBeLessThan(400);
+  }
+});
+
+test.describe('accessibility (axe)', () => {
+  for (const path of ['/', '/destinations/maasai-mara/', '/packages/wild-to-blue/', '/plan/', '/contact/', '/faq/', '/how-to-book/']) {
+    test(`${path} has no serious accessibility problems`, async ({ page }) => {
+      await page.goto(path);
+      // Scroll everything into view and let the reveal animations finish, so colours are checked as people see them.
+      await page.evaluate(async () => {
+        for (let y = 0; y < document.documentElement.scrollHeight; y += 400) {
+          window.scrollTo({ top: y, behavior: 'instant' });
+          await new Promise((r) => setTimeout(r, 30));
+        }
+        await new Promise((r) => setTimeout(r, 150));
+        await Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => undefined)));
+      });
+      const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+      const serious = results.violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => `${v.id}: ${v.help} → ${v.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(' | ')}`);
+      expect(serious).toEqual([]);
+    });
+  }
+});
+
+test('mobile menu opens and closes', async ({ page }) => {
+  test.skip(!(await isMobile(page)), 'Mobile only');
+  await page.goto('/');
+  const toggle = page.locator('.menu-toggle');
+  const menu = page.locator('#main-nav');
+  await expect(menu).toBeHidden();
+  await toggle.click();
+  await expect(menu).toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await toggle.click();
+  await menu.getByRole('link', { name: 'Journeys' }).click();
+  await expect(page).toHaveURL(/\/packages\/$/);
+});
+
+test('the current page is marked in the navigation', async ({ page }) => {
+  test.skip(await isMobile(page), 'Desktop nav');
+  await page.goto('/destinations/amboseli/');
+  await expect(page.locator('#main-nav a[aria-current="page"]')).toHaveText('Destinations');
+});
+
+test('How to book is available in the main navigation', async ({ page }) => {
+  await page.goto('/');
+  if (await isMobile(page)) await page.locator('.menu-toggle').click();
+  await page.locator('#main-nav').getByRole('link', { name: 'How to book' }).click();
+  await expect(page).toHaveURL(/\/how-to-book\/$/);
+});
+
+test('FAQs open and close', async ({ page }) => {
+  await page.goto('/faq/');
+  const first = page.locator('.faq-list details').first();
+  await expect(first.locator('p')).toBeHidden();
+  await first.locator('summary').click();
+  await expect(first.locator('p')).toBeVisible();
+});
+
+test('the hero note writes itself in and is readable to screen readers', async ({ page }) => {
+  await page.goto('/');
+  const note = page.locator('.hero-whisper');
+  await expect(note.locator('.visually-hidden')).toContainText('A lioness in the long grass');
+  await expect(note.locator('.ch.on').last()).toHaveText('.', { timeout: 10_000 });
+});
+
+test('journey pages number multi-day entries correctly', async ({ page }) => {
+  await page.goto('/packages/wild-to-blue/');
+  await expect(page.locator('.day-label')).toHaveText(['Day 1', 'Day 2', 'Day 3', 'Days 4–6', 'Day 7']);
+});
+
+test('pay pages and API responses are kept out of search engines and caches', async ({ page, request }) => {
+  await page.goto('/pay/WZ-AAAAAA/');
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
+  const res = await request.get('/api/health');
+  expect(res.headers()['cache-control']).toBe('no-store');
+});
+
+test.describe('landing page motion', () => {
+  test('things move in as you scroll', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('html')).toHaveClass(/\bmotion\b/);
+    // The headline is still one readable heading.
+    await expect(page.getByRole('heading', { level: 1, name: 'Find your way into the wild.' })).toBeVisible();
+    await expect(page.locator('.marquee li').first()).toHaveText('Maasai Mara');
+
+    const card = page.locator('.journey-grid > .journey-card').first();
+    await expect(card).not.toHaveClass(/is-in/);
+    await card.scrollIntoViewIfNeeded();
+    await expect(card).toHaveClass(/is-in/);
+    await expect(card).toHaveCSS('opacity', '1', { timeout: 3000 });
+
+    // The map's pins drop in once it's on screen.
+    const map = page.locator('[data-map="home"]');
+    await map.scrollIntoViewIfNeeded();
+    await expect(map).toHaveClass(/is-in/);
+  });
+
+  test('nothing moves for people who ask for less motion', async ({ browser }) => {
+    const context = await browser.newContext({ reducedMotion: 'reduce' });
+    const page = await context.newPage();
+    await page.route(/images\.unsplash\.com|translate\.google/, (r) => r.abort());
+    await page.goto('/');
+    await expect(page.locator('html')).not.toHaveClass(/\bmotion\b/);
+    // Everything is visible straight away, without scrolling.
+    await expect(page.locator('.journey-grid > .journey-card').first()).toHaveCSS('opacity', '1');
+    await expect(page.locator('.marquee-track')).toHaveCSS('animation-name', 'none');
+    await context.close();
+  });
+});

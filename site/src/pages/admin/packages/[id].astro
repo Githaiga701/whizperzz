@@ -1,0 +1,93 @@
+---
+import Admin from '@/layouts/Admin.astro';
+import PackageForm from '@/components/admin/PackageForm.astro';
+import { setFlash, str, takeFlash } from '@/lib/admin/web';
+import { PackageError, validatePackage } from '@/lib/packages/store';
+import { valuesFromInput, valuesFromPackage } from '@/lib/packages/form-values';
+import { getDestinations } from '@/lib/content';
+import { getPackageStore } from '@/lib/server/packages';
+import { readPackageForm } from '@/lib/server/package-form';
+import { getRuntime, log } from '@/lib/server/payments';
+
+export const prerender = false;
+
+const store = getPackageStore();
+const id = Astro.params['id'] ?? '';
+const here = `/admin/packages/${id}/`;
+const places = (await getDestinations()).map((d) => ({ id: d.id, name: d.data.name }));
+const existing = await store.get(id);
+let values = existing ? valuesFromPackage(existing) : undefined;
+let error = '';
+
+if (existing && Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = str(form, 'action');
+  try {
+    if (action === 'delete') {
+      await store.remove(existing.id);
+      log('info', 'Package deleted', { id: existing.id, by: Astro.locals.admin });
+      setFlash(Astro.cookies, 'ok', `“${existing.name}” deleted. Bookings already made for it are kept.`);
+      return Astro.redirect('/admin/packages/');
+    }
+    if (action === 'toggle') {
+      await store.update({ ...existing, published: !existing.published, updatedAt: new Date().toISOString() });
+      setFlash(Astro.cookies, 'ok', existing.published ? 'Hidden from the website. It’s kept here as a draft.' : 'Now showing on the website.');
+      return Astro.redirect(here);
+    }
+    const { input, photoError } = await readPackageForm(form, existing.id);
+    values = valuesFromInput({ ...input, id: existing.id });
+    if (photoError) throw new PackageError(photoError);
+    const pkg = validatePackage(input, places.map((p) => p.id), existing);
+    await store.update(pkg);
+    log('info', 'Package updated', { id: pkg.id, by: Astro.locals.admin });
+    setFlash(Astro.cookies, 'ok', 'Saved. The website shows the changes straight away.');
+    return Astro.redirect(here);
+  } catch (err) {
+    if (!(err instanceof PackageError)) throw err;
+    error = err.message;
+  }
+}
+if (!existing) Astro.response.status = 404;
+const flash = error ? { kind: 'error' as const, text: error } : takeFlash(Astro.cookies);
+---
+
+<Admin title={existing ? existing.name : 'Journey not found'} active="packages" flash={flash}>
+  {
+    !existing || !values ? (
+      <div class="panel">
+        <h1>Journey not found</h1>
+        <p>
+          There’s no journey called {id}. <a class="link" href="/admin/packages/">Back to packages</a>
+        </p>
+      </div>
+    ) : (
+      <>
+        <div class="admin-head">
+          <div>
+            <p style="margin:0"><a href="/admin/packages/">← All packages</a></p>
+            <h1>{existing.name}</h1>
+            <p>
+              {existing.published ? <span class="badge badge--paid">On the site</span> : <span class="badge badge--cancelled">Draft</span>} {existing.days} days
+            </p>
+          </div>
+          <div class="actions">
+            {existing.published && <a class="button button--small button--ghost" href={`/packages/${existing.id}/`} target="_blank" rel="noopener">View on site</a>}
+            <form method="post">
+              <input type="hidden" name="action" value="toggle" />
+              <button class="button button--small button--ghost" type="submit">{existing.published ? 'Hide from site' : 'Publish'}</button>
+            </form>
+          </div>
+        </div>
+        <PackageForm values={values} places={places} mode="edit" depositPercent={getRuntime().booking.depositPercent} />
+        <section class="panel danger-zone" aria-labelledby="del-h">
+          <h2 id="del-h">Delete this journey</h2>
+          <p class="hint">It disappears from the website. Bookings already paid for it stay in Quotes. To keep it for later, use “Hide from site” instead.</p>
+          <form method="post">
+            <input type="hidden" name="action" value="delete" />
+            <button class="button button--small button--danger" type="submit" data-confirm={`Delete “${existing.name}”? This can’t be undone.`}>Delete journey</button>
+          </form>
+        </section>
+      </>
+    )
+  }
+</Admin>

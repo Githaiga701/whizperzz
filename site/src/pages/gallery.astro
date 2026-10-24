@@ -1,0 +1,28 @@
+---
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import { getDestinations } from '@/lib/content';
+
+const destinations = await getDestinations();
+const frames = destinations.map((d) => ({ src: d.data.photo.src.replace('w=1800', 'w=1100'), alt: d.data.photo.alt, caption: d.data.name, href: `/destinations/${d.id}/` }));
+---
+
+<Base title="Gallery" description="Photographs from the places Whizperz travels in Kenya.">
+  <PageHero title="A few frames from out there." kicker="Notes from the road" intro="Small moments, wide horizons and the colours of a Kenya journey." />
+  <section class="section" style="padding-top:0">
+    <div class="wrap">
+      <div class="gallery">
+        {
+          frames.map((f) => (
+            <figure>
+              <a href={f.href}>
+                <img src={f.src} alt={f.alt} loading="lazy" width="1100" height="733" />
+              </a>
+              <figcaption>{f.caption}</figcaption>
+            </figure>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+</Base>

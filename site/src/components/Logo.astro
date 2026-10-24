@@ -1,0 +1,14 @@
+---
+interface Props {
+  class?: string;
+}
+const { class: className } = Astro.props;
+---
+
+<span class:list={['brand-mark notranslate', className]} translate="no" aria-hidden="true">
+  <svg viewBox="0 0 48 48">
+    <circle cx="24" cy="24" r="20"></circle>
+    <path d="M11 15l5 18 8-13 8 13 5-18"></path>
+    <path d="M36 7v6M33 10h6"></path>
+  </svg>
+</span>

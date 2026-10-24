@@ -1,0 +1,47 @@
+---
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import Whisper from '@/components/Whisper.astro';
+import { site } from '@/config/site';
+---
+
+<Base title="Our story" description="Whizperz Tours & Safaris is a Nairobi-based team planning thoughtful, well-paced trips through Kenya.">
+  <PageHero
+    title="Travel with a little more wonder."
+    kicker="Our story"
+    intro="Good journeys take care of the details and leave room for the moment you didn’t plan."
+    image={{ src: 'https://images.unsplash.com/photo-1535338454770-8be927b5a00b?auto=format&fit=crop&w=2000&q=80', alt: 'A giraffe among acacia trees' }}
+  />
+
+  <section class="section">
+    <div class="wrap detail">
+      <div class="detail-body">
+        <h2 style="font-size:var(--step-3)">Why “Whizperz”?</h2>
+        <p>The best moments on safari happen quietly. The engine off, everyone leaning in, a guide whispering where to look. We named ourselves after that moment, and we plan every trip to make room for it.</p>
+        <p>Whizperz Tours & Safaris helps you see Kenya at a pace that feels right. From the first conversation to the ride back from the coast, we bring together careful planning, local knowledge and the small details that make a trip feel like yours.</p>
+        <p>Come for the landscapes, the wildlife, the food or simply the feeling of being somewhere new. We’ll build the journey around what matters to you.</p>
+        <p>You’ll find us in Nairobi at {site.contact.address.replace(', Nairobi, Kenya', '')}. Drop in, or just send a message.</p>
+      </div>
+      <aside class="field-notes">
+        <Whisper text="Ask your guide about the birds. Even the ones who say they don’t care end up with a list." from="Overheard at camp" tilt={1.5} />
+      </aside>
+    </div>
+  </section>
+
+  <section class="section section--deep">
+    <div class="wrap">
+      <ul class="values" style="border:0;margin:0;padding:0">
+        <li><strong>Thoughtfully paced</strong><span>Time to look, listen and take the long way when it’s worth it. No racing between parks to tick boxes.</span></li>
+        <li><strong>Locally rooted</strong><span>We live here. Our guides know the land, the people and which road floods in April.</span></li>
+        <li><strong>Made for you</strong><span>A trip shaped around your interests and your people, and changed as often as you need.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section cta-band">
+    <div class="wrap">
+      <h2>Let’s plan something that feels like yours.</h2>
+      <a class="button" href="/contact/">Start planning</a>
+    </div>
+  </section>
+</Base>

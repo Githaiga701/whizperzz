@@ -1,0 +1,42 @@
+---
+import Logo from './Logo.astro';
+import { site } from '@/config/site';
+import { prettyPhone } from '@/lib/enquiry';
+---
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-top">
+      <div>
+        <a class="brand" href="/" aria-label="Whizperz, home">
+          <Logo />
+          <span class="brand-name notranslate" translate="no">whizperz<small style="color:var(--on-dark-muted)">Tours & Safaris</small></span>
+        </a>
+        <p class="footer-motto">{site.motto}</p>
+      </div>
+      <div>
+        <h2>Explore</h2>
+        <ul>
+          <li><a href="/destinations/">Destinations</a></li>
+          <li><a href="/packages/">Journeys</a></li>
+          <li><a href="/plan/">Sketch a route</a></li>
+          <li><a href="/gallery/">Gallery</a></li>
+          <li><a href="/about/">Our story</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Get in touch</h2>
+        <ul>
+          {site.contact.phone && <li><a href={`tel:${site.contact.phone}`}>{prettyPhone(site.contact.phone)}</a></li>}
+          {site.contact.email && <li><a href={`mailto:${site.contact.email}`}>{site.contact.email}</a></li>}
+          <li>{site.contact.address}</li>
+          <li><a href="/how-to-book/">How to book</a> · <a href="/faq/">FAQs</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© {new Date().getFullYear()} Whizperz Tours & Safaris</span>
+      <a href="/privacy/">Privacy</a>
+    </div>
+  </div>
+</footer>

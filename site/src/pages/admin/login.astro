@@ -1,0 +1,50 @@
+---
+import Admin from '@/layouts/Admin.astro';
+import Logo from '@/components/Logo.astro';
+import { clearLoginFailures, loginLockedFor, recordLoginFailure } from '@/lib/admin/session';
+import { isHttps, safeNext, startSession, str, takeFlash } from '@/lib/admin/web';
+import { getRuntime } from '@/lib/server/payments';
+
+export const prerender = false;
+
+const rt = getRuntime();
+if (!rt.users.hasUsers()) return Astro.redirect('/admin/setup/');
+const next = safeNext(Astro.url.searchParams.get('next'));
+if (Astro.locals.admin) return Astro.redirect(next);
+
+let error = '';
+let username = '';
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  username = str(form, 'username').trim().toLowerCase();
+  const password = str(form, 'password');
+  const key = `${Astro.clientAddress}|${username}`;
+  const locked = loginLockedFor(key);
+  if (locked) {
+    error = `Too many wrong passwords. Try again in ${locked} minute${locked === 1 ? '' : 's'}.`;
+  } else {
+    const user = rt.users.verify(username, password);
+    if (user) {
+      clearLoginFailures(key);
+      startSession(Astro.cookies, rt.sessionKey, user, isHttps(Astro.request, Astro.url));
+      return Astro.redirect(next);
+    }
+    recordLoginFailure(key);
+    error = 'Wrong username or password.';
+  }
+}
+const flash = error ? { kind: 'error' as const, text: error } : takeFlash(Astro.cookies);
+---
+
+<Admin title="Log in" bare flash={flash}>
+  <a class="brand" href="/"><Logo /><span class="brand-name">whizperz<small>Admin</small></span></a>
+  <div class="panel">
+    <h1>Log in</h1>
+    <form method="post" class="admin-form">
+      <label class="field">Username<input name="username" value={username} autocomplete="username" required autofocus /></label>
+      <label class="field">Password<input name="password" type="password" autocomplete="current-password" required /></label>
+      <button class="button" type="submit">Log in</button>
+    </form>
+    <p class="hint" style="margin-top:16px">Forgot your password? Ask another admin to reset it on the Users page. If nobody can log in, use <a href="/admin/setup/?recover=1">recover access</a>.</p>
+  </div>
+</Admin>

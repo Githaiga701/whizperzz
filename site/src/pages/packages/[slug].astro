@@ -1,0 +1,128 @@
+---
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import Whisper from '@/components/Whisper.astro';
+import KenyaMap from '@/components/KenyaMap.astro';
+import EnquiryForm from '@/components/EnquiryForm.astro';
+import JourneyCard from '@/components/JourneyCard.astro';
+import BookingPanel from '@/components/BookingPanel.astro';
+import { getDestinations, toPin } from '@/lib/content';
+import { STYLE_LABEL, routeLabel } from '@/lib/packages/store';
+import { kes } from '@/lib/packages/pricing';
+import { availableMethods, dateWindow } from '@/lib/packages/booking';
+import { destinationNames, getPackageStore } from '@/lib/server/packages';
+import { getPaymentDeps, getRuntime } from '@/lib/server/payments';
+
+export const prerender = false;
+
+const store = getPackageStore();
+const pkg = await store.get(Astro.params['slug'] ?? '');
+if (!pkg || !pkg.published) return Astro.rewrite('/404');
+
+const destinations = await getDestinations();
+const names = await destinationNames();
+const places = routeLabel(pkg.route, names);
+let dayCursor = 1;
+const days = pkg.itinerary.map((day) => {
+  const start = dayCursor;
+  dayCursor += day.span;
+  const label = day.span === 1 ? `Day ${start}` : `Days ${start}–${start + day.span - 1}`;
+  return { ...day, label };
+});
+const others = (await store.list({ publishedOnly: true }))
+  .filter((o) => o.id !== pkg.id && o.styles.some((s) => pkg.styles.includes(s)))
+  .slice(0, 3);
+
+const rt = getRuntime();
+const deps = getPaymentDeps();
+const methods = availableMethods(deps);
+const win = dateWindow(deps.now(), rt.booking.leadDays);
+const bookable = pkg.pricing.adultKes !== null && (methods.mpesa || methods.card);
+---
+
+<Base title={pkg.name} description={`${pkg.days} days: ${places}. ${pkg.summary}`} heroImage={pkg.photo.src}>
+  <PageHero title={pkg.name} kicker={`${pkg.days} days, ${places}`} intro={pkg.summary} image={pkg.photo} crumbs={[{ href: '/packages/', label: 'Journeys' }]} />
+
+  <section class="section">
+    <div class="wrap detail">
+      <div>
+        <h2 style="font-size:var(--step-3)">Day by day</h2>
+        <p class="lede">A sample route. We’ll adjust the pace, stays and extras to suit you.</p>
+        <ol class="itinerary">
+          {
+            days.map((day) => (
+              <li data-reveal>
+                <span class="day-label">{day.label}</span>
+                <div>
+                  <h3>{day.title}</h3>
+                  <p>{day.note}</p>
+                </div>
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+
+      <aside class="field-notes" aria-label="Journey summary">
+        <KenyaMap pins={destinations.map(toPin)} route={pkg.route} uid="journey" label={`Map of the route: Nairobi to ${places} and back`} />
+        <Whisper text={pkg.whisper} from="A tip from our guides" />
+        <dl class="facts">
+          <div><dt>Length</dt><dd>{pkg.days} days</dd></div>
+          <div><dt>Style</dt><dd>{pkg.styles.map((s) => STYLE_LABEL[s]).join(', ')}</dd></div>
+          <div class="full">
+            <dt>Price</dt>
+            <dd>
+              <p class="price-line">
+                {pkg.pricing.adultKes ? `${kes(pkg.pricing.adultKes)} per person` : 'Priced to your dates'}
+                {pkg.pricing.childKes !== null && <small>{kes(pkg.pricing.childKes)} per child under 12.</small>}
+                {bookable && <a class="link" href="#book">Book and pay online</a>}
+              </p>
+            </dd>
+          </div>
+        </dl>
+      </aside>
+    </div>
+  </section>
+
+  {
+    bookable && (
+      <section class="section section--deep book-section" id="book">
+        <div class="wrap contact-grid">
+          <div>
+            <span class="kicker">Ready when you are</span>
+            <h2>Book it in a few minutes.</h2>
+            <p class="lede">Pick your date and who’s coming, then pay {rt.booking.depositPercent > 0 && rt.booking.depositPercent < 100 ? `a ${rt.booking.depositPercent}% deposit or the full amount` : 'securely'} by M-Pesa or card. We confirm by email and call you to fine-tune the details.</p>
+            <a class="link" href="/how-to-book/">How booking works</a>
+          </div>
+          <BookingPanel pkg={pkg} depositPercent={rt.booking.depositPercent} dateMin={win.min} dateMax={win.max} methods={methods} />
+        </div>
+      </section>
+    )
+  }
+
+  <section class={`section ${bookable ? '' : 'section--deep'}`} id="enquire">
+    <div class="wrap contact-grid">
+      <div>
+        <span class="kicker">{bookable ? 'Want it changed first?' : 'Like the look of it?'}</span>
+        <h2>Make this one yours.</h2>
+        <p class="lede">Tell us your dates and who’s coming. We’ll send back a tailored plan and a clear price, usually within a day.</p>
+      </div>
+      <EnquiryForm journey={pkg.name} heading={`Ask about ${pkg.name}`} />
+    </div>
+  </section>
+
+  {
+    others.length > 0 && (
+      <section class="section" aria-labelledby="others">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="others">You might also like</h2>
+          </div>
+          <div class="journey-grid">
+            {others.map((o) => <JourneyCard pkg={o} names={names} />)}
+          </div>
+        </div>
+      </section>
+    )
+  }
+</Base>

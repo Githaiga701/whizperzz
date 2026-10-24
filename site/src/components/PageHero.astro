@@ -1,0 +1,32 @@
+---
+interface Props {
+  title: string;
+  kicker?: string | undefined;
+  intro?: string | undefined;
+  image?: { src: string; alt: string } | undefined;
+  crumbs?: { href: string; label: string }[] | undefined;
+}
+const { title, kicker, intro, image, crumbs } = Astro.props;
+---
+
+<section class:list={['page-hero', !image && 'page-hero--plain']}>
+  {image && <img src={image.src} alt={image.alt} fetchpriority="high" width="1800" height="1000" />}
+  <div class="wrap">
+    {
+      crumbs && (
+        <nav class="crumbs" aria-label="Breadcrumb">
+          {crumbs.map((c) => (
+            <>
+              <a href={c.href}>{c.label}</a> /{' '}
+            </>
+          ))}
+          <span aria-current="page">{title}</span>
+        </nav>
+      )
+    }
+    {kicker && <span class="kicker">{kicker}</span>}
+    <h1>{title}</h1>
+    {intro && <p>{intro}</p>}
+    <slot />
+  </div>
+</section>

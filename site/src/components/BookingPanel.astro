@@ -1,0 +1,263 @@
+---
+import type { TripPackage } from '@/lib/packages/store';
+import { kes } from '@/lib/packages/pricing';
+import { MPESA_MAX_KES } from '@/lib/payments/service';
+
+interface Props {
+  pkg: TripPackage;
+  depositPercent: number;
+  dateMin: string;
+  dateMax: string;
+  methods: { mpesa: boolean; card: boolean };
+}
+
+const { pkg, depositPercent, dateMin, dateMax, methods } = Astro.props;
+const p = pkg.pricing;
+const hasChildPrice = p.childKes !== null;
+const deposits = depositPercent > 0 && depositPercent < 100;
+const defaultMethod = methods.mpesa ? 'mpesa' : 'card';
+const config = { pricing: p, depositPercent, mpesaMax: MPESA_MAX_KES, packageId: pkg.id };
+---
+
+<form class="booking" data-booking data-config={JSON.stringify(config)} novalidate>
+  <div class="booking-head">
+    <h2>Book this journey</h2>
+    <p class="booking-from">
+      <strong>{kes(p.adultKes!)}</strong> per adult{hasChildPrice && <>, {kes(p.childKes!)} per child</>}
+    </p>
+  </div>
+
+  <fieldset class="booking-step">
+    <legend><span class="step-n" aria-hidden="true">1</span> When and who</legend>
+    <label class="field">
+      Start date
+      <input type="date" name="travelDate" min={dateMin} max={dateMax} required />
+    </label>
+    <div class="booking-counts">
+      <div class="counter">
+        <span id="adults-label">{hasChildPrice ? 'Adults' : 'Travellers'}</span>
+        <div class="counter-ctrl">
+          <button type="button" class="icon-btn" data-step="adults:-1" aria-label={`Fewer ${hasChildPrice ? 'adults' : 'travellers'}`}>−</button>
+          <input name="adults" type="number" inputmode="numeric" value={String(Math.max(2, p.minGuests) > p.maxGuests ? p.minGuests : Math.max(2, p.minGuests))} min="1" max={p.maxGuests} aria-labelledby="adults-label" />
+          <button type="button" class="icon-btn" data-step="adults:1" aria-label={`More ${hasChildPrice ? 'adults' : 'travellers'}`}>+</button>
+        </div>
+      </div>
+      {
+        hasChildPrice && (
+          <div class="counter">
+            <span id="children-label">
+              Children <small>under 12</small>
+            </span>
+            <div class="counter-ctrl">
+              <button type="button" class="icon-btn" data-step="children:-1" aria-label="Fewer children">−</button>
+              <input name="children" type="number" inputmode="numeric" value="0" min="0" max={p.maxGuests} aria-labelledby="children-label" />
+              <button type="button" class="icon-btn" data-step="children:1" aria-label="More children">+</button>
+            </div>
+          </div>
+        )
+      }
+    </div>
+    {!hasChildPrice && <input type="hidden" name="children" value="0" />}
+    <p class="hint">{p.minGuests > 1 ? `${p.minGuests} to ${p.maxGuests} travellers.` : `Up to ${p.maxGuests} travellers.`}</p>
+  </fieldset>
+
+  {
+    deposits && (
+      <fieldset class="booking-step">
+        <legend><span class="step-n" aria-hidden="true">2</span> How much to pay now</legend>
+        <div class="choice-row">
+          <label class="choice">
+            <input type="radio" name="plan" value="deposit" checked />
+            <span>
+              <strong>{depositPercent}% deposit</strong>
+              <small data-deposit-amount />
+            </span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="plan" value="full" />
+            <span>
+              <strong>Pay in full</strong>
+              <small data-full-amount />
+            </span>
+          </label>
+        </div>
+        <p class="hint">With a deposit, we send a link for the balance before you travel.</p>
+      </fieldset>
+    )
+  }
+  {!deposits && <input type="hidden" name="plan" value="full" />}
+
+  <fieldset class="booking-step">
+    <legend><span class="step-n" aria-hidden="true">{deposits ? 3 : 2}</span> How to pay</legend>
+    <div class="choice-row">
+      {
+        methods.mpesa && (
+          <label class="choice">
+            <input type="radio" name="method" value="mpesa" checked={defaultMethod === 'mpesa'} />
+            <span>
+              <strong>M-Pesa</strong>
+              <small>A prompt on your phone</small>
+            </span>
+          </label>
+        )
+      }
+      {
+        methods.card && (
+          <label class="choice">
+            <input type="radio" name="method" value="card" checked={defaultMethod === 'card'} />
+            <span>
+              <strong>Card</strong>
+              <small>Visa, Mastercard via Pesapal</small>
+            </span>
+          </label>
+        )
+      }
+    </div>
+  </fieldset>
+
+  <fieldset class="booking-step">
+    <legend><span class="step-n" aria-hidden="true">{deposits ? 4 : 3}</span> Your details</legend>
+    <label class="field">Full name<input name="name" autocomplete="name" required maxlength="80" /></label>
+    <label class="field">Email <span class="hint">for your receipt</span><input name="email" type="email" autocomplete="email" required /></label>
+    <label class="field" data-phone-field>
+      <span data-phone-label>M-Pesa number</span>
+      <input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" />
+    </label>
+  </fieldset>
+
+  <div class="booking-total" aria-live="polite">
+    <div class="total-lines" data-lines></div>
+    <div class="total-row">
+      <span>Pay now</span>
+      <strong data-pay-now>—</strong>
+    </div>
+    <p class="total-note" data-total-note></p>
+  </div>
+
+  <p class="form-status" data-status role="alert"></p>
+  <button class="button booking-submit" type="submit" data-submit>Book and pay</button>
+  <p class="form-note">Secure payment by Safaricom M-Pesa or Pesapal. We never see your PIN or card details. Free to ask questions first: <a class="link" href="#enquire">send an enquiry</a>.</p>
+</form>
+
+<script>
+  import { calculatePrice, kes, PriceError, travellersLabel, type PricingRules } from '@/lib/packages/pricing';
+
+  interface Config {
+    pricing: PricingRules;
+    depositPercent: number;
+    mpesaMax: number;
+    packageId: string;
+  }
+
+  const form = document.querySelector<HTMLFormElement>('[data-booking]');
+  if (form) {
+    const cfg = JSON.parse(form.dataset['config']!) as Config;
+    const $ = <T extends Element>(sel: string) => form.querySelector<T>(sel);
+    const status = $<HTMLElement>('[data-status]')!;
+    const payNow = $<HTMLElement>('[data-pay-now]')!;
+    const lines = $<HTMLElement>('[data-lines]')!;
+    const note = $<HTMLElement>('[data-total-note]')!;
+    const submit = $<HTMLButtonElement>('[data-submit]')!;
+    const phoneInput = $<HTMLInputElement>('input[name="phone"]')!;
+    const phoneLabel = $<HTMLElement>('[data-phone-label]')!;
+    const val = (name: string) => (new FormData(form).get(name) as string | null) ?? '';
+
+    const clamp = (input: HTMLInputElement) => {
+      const min = Number(input.min || 0);
+      const max = Number(input.max || 99);
+      const n = Math.round(Number(input.value));
+      input.value = String(Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min);
+    };
+
+    function update() {
+      status.textContent = '';
+      const method = val('method');
+      phoneInput.required = method === 'mpesa';
+      phoneLabel.textContent = method === 'mpesa' ? 'M-Pesa number' : 'Phone (optional)';
+      submit.textContent = method === 'card' ? 'Book and continue to card payment' : 'Book and send M-Pesa prompt';
+      try {
+        const price = calculatePrice(cfg.pricing, { adults: Number(val('adults')), children: Number(val('children') || 0), plan: val('plan') === 'deposit' ? 'deposit' : 'full' }, cfg.depositPercent);
+        const deposit = Math.ceil((price.totalKes * price.depositPercent) / 100);
+        const dep = form!.querySelector('[data-deposit-amount]');
+        const full = form!.querySelector('[data-full-amount]');
+        if (dep) dep.textContent = kes(deposit);
+        if (full) full.textContent = kes(price.totalKes);
+        lines.innerHTML = '';
+        const row = (label: string, amount: string) => {
+          const d = document.createElement('div');
+          d.className = 'total-line';
+          const a = document.createElement('span');
+          a.textContent = label;
+          const b = document.createElement('span');
+          b.textContent = amount;
+          d.append(a, b);
+          lines.append(d);
+        };
+        row(`${price.adults} × ${kes(price.adultKes)}`, kes(price.adults * price.adultKes));
+        if (price.children) row(`${price.children} × ${kes(price.childKes)} (children)`, kes(price.children * price.childKes));
+        row(`Total for ${travellersLabel(price.adults, price.children)}`, kes(price.totalKes));
+        payNow.textContent = kes(price.payNowKes);
+        note.textContent = price.plan === 'deposit' ? `Then ${kes(price.balanceKes)} before you travel.` : 'Paid in full. Nothing more to pay.';
+        const overMpesa = method === 'mpesa' && price.payNowKes > cfg.mpesaMax;
+        submit.disabled = overMpesa;
+        if (overMpesa) status.textContent = `M-Pesa allows up to ${kes(cfg.mpesaMax)} per payment. Choose card${price.plan === 'full' && cfg.depositPercent > 0 ? ' or pay a deposit' : ''}.`;
+      } catch (err) {
+        payNow.textContent = '—';
+        lines.innerHTML = '';
+        note.textContent = '';
+        submit.disabled = true;
+        if (err instanceof PriceError) status.textContent = err.message;
+      }
+    }
+
+    form.querySelectorAll<HTMLButtonElement>('[data-step]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const [name, delta] = btn.dataset['step']!.split(':');
+        const input = form.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+        input.value = String(Number(input.value) + Number(delta));
+        clamp(input);
+        update();
+      });
+    });
+    form.addEventListener('input', update);
+    form.addEventListener('change', (e) => {
+      const t = e.target as HTMLInputElement;
+      if (t.type === 'number') clamp(t);
+      update();
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!form.reportValidity()) return;
+      submit.disabled = true;
+      form.setAttribute('aria-busy', 'true');
+      status.textContent = val('method') === 'mpesa' ? 'Saving your booking and sending the M-Pesa prompt…' : 'Saving your booking…';
+      try {
+        const res = await fetch('/api/book', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            packageId: cfg.packageId,
+            travelDate: val('travelDate'),
+            adults: Number(val('adults')),
+            children: Number(val('children') || 0),
+            plan: val('plan'),
+            method: val('method'),
+            name: val('name'),
+            email: val('email'),
+            phone: val('phone'),
+          }),
+        });
+        const data = (await res.json()) as { next?: string; message?: string };
+        if (!res.ok || !data.next) throw new Error(data.message ?? 'Something went wrong. Please try again.');
+        window.location.assign(data.next);
+      } catch (err) {
+        status.textContent = (err as Error).message.includes('fetch') ? 'Couldn’t connect. Check your internet connection and try again.' : (err as Error).message;
+        submit.disabled = false;
+        form.removeAttribute('aria-busy');
+      }
+    });
+
+    update();
+  }
+</script>

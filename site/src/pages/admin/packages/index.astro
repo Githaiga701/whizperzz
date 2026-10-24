@@ -1,0 +1,64 @@
+---
+import Admin from '@/layouts/Admin.astro';
+import { takeFlash } from '@/lib/admin/web';
+import { routeLabel } from '@/lib/packages/store';
+import { kes } from '@/lib/packages/pricing';
+import { destinationNames, getPackageStore } from '@/lib/server/packages';
+
+export const prerender = false;
+
+const packages = await getPackageStore().list();
+const names = await destinationNames();
+const flash = takeFlash(Astro.cookies);
+const live = packages.filter((p) => p.published).length;
+const unpriced = packages.filter((p) => p.published && p.pricing.adultKes === null).length;
+---
+
+<Admin title="Packages" active="packages" flash={flash}>
+  <div class="admin-head">
+    <div>
+      <h1>Packages</h1>
+      <p>{live} of {packages.length} journeys on the website.{unpriced > 0 && ` ${unpriced} ${unpriced === 1 ? 'has' : 'have'} no price yet, so guests can only enquire.`}</p>
+    </div>
+    <a class="button" href="/admin/packages/new/">New journey</a>
+  </div>
+
+  {
+    packages.length === 0 ? (
+      <div class="panel empty">No journeys yet. <a class="link" href="/admin/packages/new/">Add the first one</a>.</div>
+    ) : (
+      <div class="table-wrap">
+        <table class="admin-table pkg-table">
+          <thead>
+            <tr>
+              <th scope="col">Journey</th>
+              <th scope="col" class="hide-sm">Route</th>
+              <th scope="col" class="num">Days</th>
+              <th scope="col" class="num">Per adult</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {packages.map((p) => (
+              <tr data-pkg={p.id}>
+                <td>
+                  <div class="pkg-cell">
+                    <img src={p.photo.src} alt="" width="64" height="44" loading="lazy" />
+                    <span>
+                      <a href={`/admin/packages/${p.id}/`}>{p.name}</a>
+                      <small class="show-sm">{routeLabel(p.route, names)}</small>
+                    </span>
+                  </div>
+                </td>
+                <td class="hide-sm">{routeLabel(p.route, names)}</td>
+                <td class="num">{p.days}</td>
+                <td class="num">{p.pricing.adultKes === null ? <span class="hint">Not set</span> : kes(p.pricing.adultKes)}</td>
+                <td>{p.published ? <span class="badge badge--paid">On the site</span> : <span class="badge badge--cancelled">Draft</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</Admin>

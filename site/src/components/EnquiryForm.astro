@@ -1,0 +1,73 @@
+---
+import { MONTHS } from '@/lib/enquiry';
+
+interface Props {
+  /** Journey name when the form sits on a journey page. */
+  journey?: string;
+  heading?: string;
+}
+const { journey, heading = 'Tell us about your trip' } = Astro.props;
+---
+
+<form class="enquiry-form" data-enquiry data-journey={journey}>
+  <h2 style="font-size:var(--step-2);margin:0">{heading}</h2>
+  <div class="two">
+    <label class="field">Your name<input name="name" autocomplete="name" required /></label>
+    <label class="field"><span>Email <span style="font-weight:400;color:var(--muted)">(optional)</span></span><input name="email" type="email" autocomplete="email" /></label>
+  </div>
+  <div class="two">
+    <label class="field">
+      When
+      <select name="month">
+        <option value="">Not sure yet</option>
+        {MONTHS.map((m) => <option>{m}</option>)}
+      </select>
+    </label>
+    <label class="field">Travellers<input name="travellers" type="number" min="1" max="40" inputmode="numeric" placeholder="2" /></label>
+  </div>
+  <label class="field">
+    What are you hoping for?
+    <textarea name="message" rows="4" required placeholder={journey ? 'Dates, who’s coming, anything you’d like to change…' : 'Places, dates, who’s coming, the kind of trip you love…'}></textarea>
+  </label>
+  <div class="button-row">
+    <button class="button button--whatsapp" type="submit" value="whatsapp">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 11.7a8 8 0 0 1-11.8 7L4 20l1.3-4A8 8 0 1 1 20 11.7Z" /></svg>
+      Send on WhatsApp
+    </button>
+    <button class="button button--ghost" type="submit" value="email">Send by email</button>
+  </div>
+  <p class="form-status" data-status role="status"></p>
+  <p class="form-note" style="margin:0">This opens WhatsApp or your email app with your message written out, ready to send. Nothing is stored on this website.</p>
+</form>
+
+<script>
+  import { emailUrl, formatEnquiry, whatsappUrl } from '@/lib/enquiry';
+
+  document.querySelectorAll<HTMLFormElement>('[data-enquiry]').forEach((form) => {
+    const status = form.querySelector<HTMLElement>('[data-status]')!;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const get = (k: string) => String(fd.get(k) ?? '').trim() || undefined;
+      const journey = form.dataset['journey'];
+      const text = formatEnquiry({
+        journey,
+        name: get('name'),
+        email: get('email'),
+        month: get('month'),
+        travellers: Number(fd.get('travellers')) || undefined,
+        message: get('message'),
+      });
+      const via = (e.submitter as HTMLButtonElement | null)?.value;
+      const subject = journey ? `Enquiry: ${journey}` : 'Trip enquiry';
+      const url = via === 'email' ? emailUrl(subject, text) : whatsappUrl(text);
+      if (!url) {
+        status.textContent = 'That contact option isn’t set up yet. Please use the other button.';
+        return;
+      }
+      if (via === 'email') location.href = url;
+      else window.open(url, '_blank', 'noopener');
+      status.textContent = via === 'email' ? 'Your email app should open with your message ready to send.' : 'WhatsApp should open with your message ready to send.';
+    });
+  });
+</script>

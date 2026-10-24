@@ -1,0 +1,25 @@
+---
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import { site } from '@/config/site';
+import { prettyPhone } from '@/lib/enquiry';
+---
+
+<Base title="Privacy" description="How Whizperz Tours & Safaris handles information on this website.">
+  <PageHero title="Privacy policy." kicker="The details" intro="Last updated 23 October 2026." />
+  <section class="section" style="padding-top:0">
+    <div class="wrap prose">
+      <p>This notice explains what happens to information on the Whizperz Tours & Safaris website. It should be reviewed against the business’s actual practices and Kenya’s Data Protection Act before launch.</p>
+      <h2>Enquiries</h2>
+      <p>The enquiry form and route sketcher do not send or store anything on this website. They open WhatsApp or your email app with your message written out, and you choose whether to send it. Once you send it, we use your details only to reply and plan your trip.</p>
+      <h2>Saved routes</h2>
+      <p>The route sketcher remembers your route in your own browser so it’s still there when you come back. It never leaves your device unless you send it to us. Clearing your browser data removes it.</p>
+      <h2>Other services</h2>
+      <p>This site uses Google Translate for translation, Google Fonts for typefaces and Unsplash for some photography. Those services may process technical data such as your IP address under their own privacy terms.</p>
+      <h2>Payments</h2>
+      <p>Payments are made through a private pay link. M-Pesa payments are processed by Safaricom and card payments by Pesapal. We store your booking reference, the amount, the phone number an M-Pesa prompt was sent to, and the receipt or confirmation code, so we can match your payment to your booking. We never see or store your M-Pesa PIN or card details.</p>
+      <h2>Contact</h2>
+      <p>For privacy questions, contact us at <a class="link" href={`mailto:${site.contact.email}`}>{site.contact.email}</a> or {prettyPhone(site.contact.phone)}. Our office is in {site.contact.address}.</p>
+    </div>
+  </section>
+</Base>

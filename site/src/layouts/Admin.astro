@@ -1,0 +1,103 @@
+---
+import '@fontsource/gloock/400.css';
+import '@fontsource/hanken-grotesk/400.css';
+import '@fontsource/hanken-grotesk/500.css';
+import '@fontsource/hanken-grotesk/600.css';
+import '@fontsource/hanken-grotesk/700.css';
+import '@/styles/global.css';
+import '@/styles/admin.css';
+import Logo from '@/components/Logo.astro';
+import type { Flash } from '@/lib/admin/web';
+
+interface Props {
+  title: string;
+  /** Which nav item to highlight. */
+  active?: 'quotes' | 'new' | 'packages' | 'settings' | 'users';
+  flash?: Flash | undefined;
+  /** Login and setup pages have no navigation. */
+  bare?: boolean;
+}
+
+const { title, active, flash, bare = false } = Astro.props;
+const user = Astro.locals.admin;
+const nav = [
+  { href: '/admin/', label: 'Quotes', key: 'quotes' },
+  { href: '/admin/quotes/new/', label: 'New quote', key: 'new' },
+  { href: '/admin/packages/', label: 'Packages', key: 'packages' },
+  { href: '/admin/settings/', label: 'Settings', key: 'settings' },
+  { href: '/admin/users/', label: 'Users', key: 'users' },
+] as const;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#2a2017" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title} | Whizperz admin</title>
+  </head>
+  <body class="admin-body">
+    <a class="skip-link" href="#main">Skip to content</a>
+    {
+      !bare && (
+        <header class="admin-top">
+          <div class="wrap">
+            <a class="brand" href="/admin/">
+              <Logo />
+              <span class="brand-name notranslate" translate="no">
+                whizperz<small>Admin</small>
+              </span>
+            </a>
+            <nav class="admin-nav" aria-label="Admin">
+              {nav.map((n) => (
+                <a href={n.href} aria-current={active === n.key ? 'page' : undefined}>
+                  {n.label}
+                </a>
+              ))}
+              <a href="/" target="_blank" rel="noopener">View site</a>
+              {user && <span class="admin-user">{user}</span>}
+              {user && (
+                <form method="post" action="/admin/logout/">
+                  <button type="submit">Log out</button>
+                </form>
+              )}
+            </nav>
+          </div>
+        </header>
+      )
+    }
+    <main id="main" class:list={[bare ? 'auth-wrap' : 'admin-main wrap']}>
+      {flash && <div class:list={['flash', `flash--${flash.kind}`]} role={flash.kind === 'error' ? 'alert' : 'status'}>{flash.text}</div>}
+      <slot />
+    </main>
+    <script>
+      // "Copy" buttons: <button data-copy="#input-id">
+      document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const input = document.querySelector<HTMLInputElement>(btn.dataset['copy']!);
+          if (!input) return;
+          const old = btn.textContent;
+          try {
+            await navigator.clipboard.writeText(input.value);
+            btn.textContent = 'Copied';
+          } catch {
+            // Clipboard blocked (e.g. not https): select it so Ctrl+C works.
+            input.focus();
+            input.select();
+            btn.textContent = 'Press Ctrl+C';
+          }
+          setTimeout(() => (btn.textContent = old), 1600);
+        });
+      });
+      // Buttons that need a second click: <button data-confirm="Cancel this quote?">
+      document.querySelectorAll<HTMLButtonElement>('[data-confirm]').forEach((btn) => {
+        btn.form?.addEventListener('submit', (e) => {
+          if ((e.submitter as HTMLElement | null) === btn && !window.confirm(btn.dataset['confirm']!)) e.preventDefault();
+        });
+      });
+    </script>
+  </body>
+</html>

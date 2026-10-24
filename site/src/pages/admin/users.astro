@@ -1,0 +1,121 @@
+---
+import Admin from '@/layouts/Admin.astro';
+import { setFlash, str, takeFlash, endSession } from '@/lib/admin/web';
+import { AdminError } from '@/lib/admin/users';
+import { getRuntime } from '@/lib/server/payments';
+import { shortDate } from '@/lib/admin/labels';
+
+export const prerender = false;
+
+const rt = getRuntime();
+const me = Astro.locals.admin!;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = str(form, 'action');
+  try {
+    if (action === 'add') {
+      if (str(form, 'password') !== str(form, 'confirm')) throw new AdminError('The two passwords don’t match.');
+      const u = rt.users.create(str(form, 'username'), str(form, 'password'));
+      setFlash(Astro.cookies, 'ok', `${u.username} can now log in. Share their password with them privately.`);
+    } else if (action === 'remove') {
+      const who = str(form, 'username');
+      rt.users.remove(who, me);
+      setFlash(Astro.cookies, 'ok', `${who} has been removed and logged out.`);
+    } else if (action === 'reset') {
+      const who = str(form, 'username');
+      if (who === me) throw new AdminError('Use “Change your password” for your own account.');
+      rt.users.resetPassword(who, str(form, 'password'));
+      setFlash(Astro.cookies, 'ok', `New password set for ${who}. They’ve been logged out everywhere.`);
+    } else if (action === 'password') {
+      if (str(form, 'next') !== str(form, 'confirm')) throw new AdminError('The two new passwords don’t match.');
+      rt.users.changePassword(me, str(form, 'current'), str(form, 'next'));
+      endSession(Astro.cookies);
+      setFlash(Astro.cookies, 'ok', 'Password changed. Log in with your new password.');
+      return Astro.redirect('/admin/login/');
+    } else {
+      throw new AdminError('Unknown action.');
+    }
+  } catch (err) {
+    if (!(err instanceof AdminError)) throw err;
+    setFlash(Astro.cookies, 'error', err.message);
+  }
+  return Astro.redirect('/admin/users/');
+}
+
+const users = rt.users.list();
+const flash = takeFlash(Astro.cookies);
+---
+
+<Admin title="Users" active="users" flash={flash}>
+  <div class="admin-head">
+    <div>
+      <h1>Users</h1>
+      <p>People who can log in to this admin. Everyone has full access.</p>
+    </div>
+  </div>
+
+  <div class="panel-grid">
+    <div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead><tr><th scope="col">Username</th><th scope="col">Added</th><th scope="col">Actions</th></tr></thead>
+          <tbody>
+            {
+              users.map((u) => (
+                <tr>
+                  <td>{u.username}{u.username === me && <small>That’s you</small>}</td>
+                  <td>{shortDate(u.createdAt)}</td>
+                  <td>
+                    {u.username !== me && (
+                      <div class="actions">
+                        <details>
+                          <summary style="cursor:pointer">New password</summary>
+                          <form method="post" class="copy-row" style="margin-top:8px">
+                            <input type="hidden" name="action" value="reset" />
+                            <input type="hidden" name="username" value={u.username} />
+                            <input name="password" type="password" minlength="10" required autocomplete="new-password" aria-label={`New password for ${u.username}`} />
+                            <button class="button button--small button--ghost" type="submit">Set</button>
+                          </form>
+                        </details>
+                        <form method="post">
+                          <input type="hidden" name="action" value="remove" />
+                          <input type="hidden" name="username" value={u.username} />
+                          <button class="button button--small button--danger" type="submit" data-confirm={`Remove ${u.username}? They will be logged out.`}>Remove</button>
+                        </form>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <section class="panel" style="margin-top:20px" aria-labelledby="add-h">
+        <h2 id="add-h">Add a user</h2>
+        <form method="post" class="admin-form">
+          <input type="hidden" name="action" value="add" />
+          <label class="field">Username<input name="username" required minlength="3" maxlength="32" autocomplete="off" /></label>
+          <div class="two">
+            <label class="field">Password<input name="password" type="password" required minlength="10" autocomplete="new-password" /></label>
+            <label class="field">Password again<input name="confirm" type="password" required minlength="10" autocomplete="new-password" /></label>
+          </div>
+          <button class="button button--small" type="submit">Add user</button>
+        </form>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="pw-h">
+      <h2 id="pw-h">Change your password</h2>
+      <form method="post" class="admin-form">
+        <input type="hidden" name="action" value="password" />
+        <label class="field">Current password<input name="current" type="password" required autocomplete="current-password" /></label>
+        <label class="field">New password<input name="next" type="password" required minlength="10" autocomplete="new-password" /></label>
+        <label class="field">New password again<input name="confirm" type="password" required minlength="10" autocomplete="new-password" /></label>
+        <button class="button button--small" type="submit">Change password</button>
+      </form>
+    </section>
+  </div>
+</Admin>

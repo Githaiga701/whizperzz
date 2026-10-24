@@ -1,0 +1,222 @@
+---
+import { STYLES, STYLE_LABEL } from '@/lib/packages/store';
+import type { PackageFormValues } from '@/lib/packages/form-values';
+
+interface Props {
+  values: PackageFormValues;
+  places: { id: string; name: string }[];
+  mode: 'new' | 'edit';
+  depositPercent: number;
+}
+
+const { values: v, places, mode, depositPercent } = Astro.props;
+const stops = [...v.route, ''];
+const days = [...v.itinerary, { title: '', note: '', span: '1' }];
+---
+
+<form method="post" enctype="multipart/form-data" class="pkg-form" data-pkg-form data-deposit={depositPercent}>
+  <input type="hidden" name="action" value="save" />
+
+  <section class="panel" aria-labelledby="pf-basics">
+    <h2 id="pf-basics">The basics</h2>
+    <div class="admin-form">
+      <label class="field">Journey name<input name="name" value={v.name} required maxlength="80" placeholder="e.g. Wild to blue" data-name /></label>
+      {
+        mode === 'new' ? (
+          <label class="field">
+            Web address
+            <span class="hint">Letters, numbers and dashes. Filled in from the name; can’t be changed later.</span>
+            <span class="slug-row"><span class="code">/packages/</span><input name="id" value={v.id} maxlength="60" pattern="[a-z0-9]+(-[a-z0-9]+)*" data-slug /></span>
+          </label>
+        ) : (
+          <p class="hint" style="margin:0">Web address: <a class="code" href={`/packages/${v.id}/`} target="_blank" rel="noopener">/packages/{v.id}/</a></p>
+        )
+      }
+      <label class="field">Summary <span class="hint">One or two sentences for the cards and the top of the page.</span><textarea name="summary" required maxlength="300" rows="3">{v.summary}</textarea></label>
+      <label class="field">Guide’s tip <span class="hint">Optional. Shown in handwriting, e.g. “Ask for the hippo pool at dusk.”</span><input name="whisper" value={v.whisper} maxlength="200" /></label>
+      <fieldset class="check-row">
+        <legend>Trip style</legend>
+        {STYLES.map((s) => (
+          <label><input type="checkbox" name="styles" value={s} checked={v.styles.includes(s)} /> {STYLE_LABEL[s]}</label>
+        ))}
+      </fieldset>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="pf-price">
+    <h2 id="pf-price">Price</h2>
+    <p class="hint">Per person, in Kenyan shillings. Leave the adult price empty to show “Priced to your dates” and take enquiries only.</p>
+    <div class="admin-form">
+      <div class="two">
+        <label class="field">Price per adult (KES)<input name="adultKes" value={v.adultKes} inputmode="numeric" placeholder="185000" pattern="[0-9, ]*" data-adult /></label>
+        <label class="field">Price per child under 12 (KES) <span class="hint">Optional. Empty = same as adults.</span><input name="childKes" value={v.childKes} inputmode="numeric" pattern="[0-9, ]*" /></label>
+      </div>
+      <div class="two">
+        <label class="field">Smallest group<input name="minGuests" value={v.minGuests} inputmode="numeric" type="number" min="1" max="50" /></label>
+        <label class="field">Largest group<input name="maxGuests" value={v.maxGuests} inputmode="numeric" type="number" min="1" max="50" /></label>
+      </div>
+      <p class="price-preview" data-price-preview aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="pf-route">
+    <h2 id="pf-route">Route</h2>
+    <p class="hint">The places in the order the trip visits them. They’re drawn on the map.</p>
+    <ol class="stop-rows" data-stops>
+      {stops.map((id) => (
+        <li class="stop-row">
+          <select name="route" aria-label="Place">
+            <option value="">{id ? 'Remove this stop' : 'Add a place…'}</option>
+            {places.map((p) => <option value={p.id} selected={p.id === id}>{p.name}</option>)}
+          </select>
+          <button type="button" class="mini-btn" data-move="-1" aria-label="Move up">↑</button>
+          <button type="button" class="mini-btn" data-move="1" aria-label="Move down">↓</button>
+          <button type="button" class="mini-btn" data-remove aria-label="Remove">✕</button>
+        </li>
+      ))}
+    </ol>
+    <button type="button" class="button button--small button--ghost" data-add-stop>Add another place</button>
+  </section>
+
+  <section class="panel" aria-labelledby="pf-days">
+    <h2 id="pf-days">Day by day</h2>
+    <p class="hint">Each row can cover more than one day. The journey length is worked out from these: <strong data-day-total>{v.itinerary.reduce((n, d) => n + (Number(d.span) || 0), 0)} days</strong>.</p>
+    <ol class="day-rows" data-days>
+      {days.map((d) => (
+        <li class="day-row">
+          <div class="day-row-main">
+            <input name="dayTitle" value={d.title} placeholder="Title, e.g. Into the Mara" aria-label="Day title" maxlength="100" />
+            <textarea name="dayNote" rows="2" placeholder="What happens" aria-label="Day description" maxlength="600">{d.note}</textarea>
+          </div>
+          <label class="day-span">Days<input name="daySpan" type="number" min="1" max="30" value={d.span} /></label>
+          <div class="day-tools">
+            <button type="button" class="mini-btn" data-move="-1" aria-label="Move up">↑</button>
+            <button type="button" class="mini-btn" data-move="1" aria-label="Move down">↓</button>
+            <button type="button" class="mini-btn" data-remove aria-label="Remove">✕</button>
+          </div>
+        </li>
+      ))}
+    </ol>
+    <button type="button" class="button button--small button--ghost" data-add-day>Add a day</button>
+  </section>
+
+  <section class="panel" aria-labelledby="pf-photo">
+    <h2 id="pf-photo">Photo</h2>
+    <div class="photo-edit">
+      <img src={v.photoSrc || undefined} alt="" data-photo-preview hidden={!v.photoSrc} />
+      <div class="admin-form">
+        <label class="field">Upload a photo <span class="hint">JPG, PNG or WebP, up to 5 MB. Wide photos work best.</span><input type="file" name="photoFile" accept="image/jpeg,image/png,image/webp" data-photo-file /></label>
+        <label class="field">…or paste an image address<input name="photoSrc" value={v.photoSrc} placeholder="https://…" data-photo-src /></label>
+        <label class="field">Describe the photo <span class="hint">For people using screen readers, e.g. “Elephants at sunset in Amboseli”.</span><input name="photoAlt" value={v.photoAlt} maxlength="200" /></label>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="pf-pub">
+    <h2 id="pf-pub">Publishing</h2>
+    <div class="admin-form">
+      <label class="toggle"><input type="checkbox" name="published" checked={v.published} /> <span><strong>Show on the website</strong><small>Unticked journeys are kept here as drafts.</small></span></label>
+      <label class="field" style="max-width:220px">Order <span class="hint">Lower numbers show first.</span><input name="order" type="number" min="0" max="999" value={v.order} /></label>
+    </div>
+  </section>
+
+  <div class="pkg-save">
+    <button class="button" type="submit">{mode === 'new' ? 'Create journey' : 'Save changes'}</button>
+    <a class="button button--ghost" href="/admin/packages/">Back to packages</a>
+  </div>
+</form>
+
+<script>
+  import { slugify } from '@/lib/packages/slug';
+
+  const form = document.querySelector<HTMLFormElement>('[data-pkg-form]');
+  if (form) {
+    // Web address follows the name until it's edited by hand.
+    const name = form.querySelector<HTMLInputElement>('[data-name]');
+    const slug = form.querySelector<HTMLInputElement>('[data-slug]');
+    if (name && slug) {
+      let touched = slug.value !== '' && slug.value !== slugify(name.value);
+      slug.addEventListener('input', () => (touched = true));
+      name.addEventListener('input', () => {
+        if (!touched) slug.value = slugify(name.value);
+      });
+    }
+
+    // Repeating rows: move, remove, add (the last row is always a blank template).
+    const wire = (listSel: string, addSel: string, onChange: () => void) => {
+      const list = form.querySelector<HTMLOListElement>(listSel)!;
+      const blank = list.lastElementChild!.cloneNode(true) as HTMLElement;
+      list.addEventListener('click', (e) => {
+        const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
+        if (!btn) return;
+        const row = btn.closest('li')!;
+        if (btn.dataset['remove'] !== undefined) {
+          if (list.children.length > 1) row.remove();
+          else row.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input,textarea,select').forEach((el) => (el.value = el.type === 'number' ? '1' : ''));
+        } else if (btn.dataset['move']) {
+          const sib = btn.dataset['move'] === '-1' ? row.previousElementSibling : row.nextElementSibling?.nextElementSibling ?? null;
+          if (btn.dataset['move'] === '-1' && sib) list.insertBefore(row, sib);
+          if (btn.dataset['move'] === '1' && row.nextElementSibling) list.insertBefore(row, sib);
+          btn.focus();
+        }
+        onChange();
+      });
+      form.querySelector(addSel)!.addEventListener('click', () => {
+        const row = blank.cloneNode(true) as HTMLElement;
+        list.append(row);
+        row.querySelector<HTMLElement>('input,select')?.focus();
+        onChange();
+      });
+    };
+
+    const total = form.querySelector<HTMLElement>('[data-day-total]')!;
+    const countDays = () => {
+      const n = [...form.querySelectorAll<HTMLInputElement>('[name="daySpan"]')].reduce((sum, el) => {
+        const title = el.closest('li')!.querySelector<HTMLInputElement>('[name="dayTitle"]')!.value.trim();
+        return title ? sum + (Number(el.value) || 0) : sum;
+      }, 0);
+      total.textContent = `${n} day${n === 1 ? '' : 's'}`;
+    };
+    wire('[data-stops]', '[data-add-stop]', () => {});
+    wire('[data-days]', '[data-add-day]', countDays);
+    form.addEventListener('input', (e) => {
+      const t = e.target as HTMLElement;
+      if (t.matches('[name="daySpan"], [name="dayTitle"]')) countDays();
+    });
+
+    // Price preview.
+    const preview = form.querySelector<HTMLElement>('[data-price-preview]')!;
+    const deposit = Number(form.dataset['deposit']);
+    const showPrice = () => {
+      const raw = (form.querySelector<HTMLInputElement>('[data-adult]')!.value || '').replace(/[,\s]/g, '');
+      const n = Number(raw);
+      if (!raw) preview.textContent = 'Guests will see “Priced to your dates” and can send an enquiry.';
+      else if (!Number.isInteger(n) || n < 1) preview.textContent = 'Type a whole number of shillings.';
+      else {
+        const two = n * 2;
+        const dep = Math.ceil((two * deposit) / 100);
+        preview.textContent = `Example: 2 adults = KES ${two.toLocaleString('en-KE')}${deposit > 0 && deposit < 100 ? `, or a ${deposit}% deposit of KES ${dep.toLocaleString('en-KE')} now` : ''}.`;
+      }
+    };
+    form.querySelector('[data-adult]')!.addEventListener('input', showPrice);
+    showPrice();
+
+    // Photo preview.
+    const img = form.querySelector<HTMLImageElement>('[data-photo-preview]')!;
+    const file = form.querySelector<HTMLInputElement>('[data-photo-file]')!;
+    const src = form.querySelector<HTMLInputElement>('[data-photo-src]')!;
+    file.addEventListener('change', () => {
+      const f = file.files?.[0];
+      if (!f) return;
+      img.src = URL.createObjectURL(f);
+      img.hidden = false;
+      src.required = false;
+    });
+    src.addEventListener('change', () => {
+      if (/^(https:\/\/|\/)/.test(src.value)) {
+        img.src = src.value;
+        img.hidden = false;
+      }
+    });
+  }
+</script>

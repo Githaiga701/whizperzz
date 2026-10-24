@@ -1,0 +1,207 @@
+---
+import Base from '@/layouts/Base.astro';
+import Whisper from '@/components/Whisper.astro';
+import KenyaMap from '@/components/KenyaMap.astro';
+import JourneyCard from '@/components/JourneyCard.astro';
+import TripSketcher from '@/components/TripSketcher.astro';
+import { getDestinations, kindLabel, toPin } from '@/lib/content';
+import { destinationNames, getPackageStore } from '@/lib/server/packages';
+
+export const prerender = false;
+import { faqs } from '@/data/faq';
+import { site } from '@/config/site';
+
+const destinations = await getDestinations();
+const journeys = await getPackageStore().list({ publishedOnly: true });
+const names = await destinationNames();
+const featured = journeys.slice(0, 3);
+const heroImage = 'https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=2200&q=80';
+const strip = destinations.slice(0, 5);
+const headline = 'Find your way into the wild.'.split(' ');
+const quote = 'A safari should feel less like a checklist and more like being let in.'.split(' ');
+const marquee = destinations.map((d) => d.data.name);
+---
+
+<Base title={site.name} heroImage={heroImage}>
+  <section class="hero" data-parallax>
+    <div class="hero-photo">
+      <img src={heroImage} alt="Elephants walking across the savannah at sunset" width="2200" height="1400" fetchpriority="high" />
+    </div>
+    <svg class="flock" viewBox="0 0 200 60" aria-hidden="true" focusable="false">
+      {[[0, 20, 1], [26, 8, 0.8], [48, 26, 0.9], [70, 12, 0.7], [92, 30, 0.6]].map(([x, y, s], i) => (
+        <g transform={`translate(${x} ${y}) scale(${s})`}>
+          <path class="bird" style={`--d:${(i * 0.17).toFixed(2)}s`} d="M0 6 Q6 0 11 6 Q16 0 22 6" />
+        </g>
+      ))}
+    </svg>
+    <Whisper
+      class="hero-whisper"
+      text="6:10am, the Mara. A lioness in the long grass, forty metres out. Nobody in the vehicle said a word."
+      from="Notes from one of our guides"
+      tilt={2}
+      typing
+    />
+    <div class="wrap">
+      <h1 class="hero-title" aria-label={headline.join(' ')}>
+        {headline.map((w, i) => (
+          <>
+            <span class="word" aria-hidden="true"><span style={`--i:${i}`}>{w}</span></span>{' '}
+          </>
+        ))}
+      </h1>
+      <p class="hero-copy">Small trips through Kenya, planned by people who know the road. The early light on the plains, the long way to the coast, and the quiet moments in between.</p>
+      <div class="button-row hero-actions">
+        <a class="button button--light" href="#sketch">Sketch your route</a>
+        <a class="button button--outline-light" href="/packages/">See our journeys</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap intro">
+      <h2 data-reveal>Come for the wild. Stay for the feeling.</h2>
+      <div>
+        <p class="lede">We think the best journeys have room to breathe. So we bring together Kenya’s wide-open landscapes, local guides who know them well and stays that feel like they belong, then leave space for the unexpected.</p>
+        <a class="link" href="/about/">Read our story</a>
+      </div>
+      <ul class="values" data-reveal-group>
+        <li><strong>Thoughtfully paced</strong><span>Time to look, listen and take the long way when it’s worth it.</span></li>
+        <li><strong>Locally rooted</strong><span>Nairobi-based, with guides who grew up around the places you’ll see.</span></li>
+        <li><strong>Made for you</strong><span>Every trip is shaped around your dates, your people and what you love.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee-track">
+      {[0, 1].map(() => (
+        <ul>
+          {marquee.map((m) => (
+            <li>{m}</li>
+          ))}
+        </ul>
+      ))}
+    </div>
+  </div>
+
+  <section class="section section--deep" aria-labelledby="where-title">
+    <div class="wrap where">
+      <div class="where-map">
+        <KenyaMap pins={destinations.map(toPin)} mode="links" uid="home" label="Map of Kenya showing the places we travel to" />
+      </div>
+      <div>
+        <span class="kicker">Where we go</span>
+        <h2 id="where-title">Kenya, in all its contrast.</h2>
+        <p class="lede">Open plains, cool highlands, Rift Valley lakes and the Indian Ocean, all within a day of Nairobi.</p>
+        <ul class="place-list" data-place-list>
+          {
+            destinations.map((d) => (
+              <li>
+                <a href={`/destinations/${d.id}/`} data-place={d.id}>
+                  <strong>{d.data.name}</strong>
+                  <span>{d.data.tagline}</span>
+                  <em>{kindLabel[d.data.kind]}</em>
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="journeys-title">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <h2 id="journeys-title">Choose your kind of far away.</h2>
+        <p>A few ways to begin. Every journey can be changed around your time, your people and your budget.</p>
+      </div>
+      <div class="journey-grid" data-reveal-group>
+        {featured.map((j) => <JourneyCard pkg={j} names={names} />)}
+      </div>
+      <p style="margin-top:32px"><a class="link" href="/packages/">See all {journeys.length} journeys</a></p>
+    </div>
+  </section>
+
+  <TripSketcher destinations={destinations} />
+
+  <section class="section" aria-labelledby="road-title">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <h2 id="road-title">A few frames from out there.</h2>
+        <a class="link" href="/gallery/">Open the gallery</a>
+      </div>
+      <div class="photo-strip" data-reveal-group>
+        {
+          strip.slice(0, 4).map((d) => (
+            <figure>
+              <img src={d.data.photo.src.replace('w=1800', 'w=1000')} alt={d.data.photo.alt} loading="lazy" width="1000" height="700" />
+              <figcaption>{d.data.name}</figcaption>
+            </figure>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="quote-band section">
+    <img src="https://images.unsplash.com/photo-1535338454770-8be927b5a00b?auto=format&fit=crop&w=2000&q=80" alt="" loading="lazy" width="2000" height="1200" />
+    <div class="wrap">
+      <blockquote data-words>
+        {quote.map((w, i) => (
+          <>
+            <span style={`--i:${i}`}>{w}</span>{' '}
+          </>
+        ))}
+      </blockquote>
+      <cite>The Whizperz way</cite>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="faq-title">
+    <div class="wrap faq">
+      <div>
+        <h2 id="faq-title">Things you might wonder.</h2>
+        <p class="lede">Something else on your mind? Ask us. We answer on WhatsApp too.</p>
+        <a class="link" href="/faq/">All questions</a>
+      </div>
+      <div class="faq-list" data-reveal-group>
+        {
+          faqs.filter((f) => f.featured).map((f) => (
+            <details>
+              <summary>{f.q}</summary>
+              <p>{f.a}</p>
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--deep cta-band">
+    <div class="wrap" data-reveal>
+      <h2>Tell us where you’d like to wake up.</h2>
+      <div class="button-row">
+        <a class="button" href="/contact/">Start planning</a>
+        <a class="button button--ghost" href="/plan/">Sketch a route</a>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script>
+  // Hovering a place in the list lights up its pin on the map.
+  const list = document.querySelector('[data-place-list]');
+  const map = document.querySelector('[data-map="home"]');
+  if (list && map) {
+    const light = (id: string | null) =>
+      map.querySelectorAll<SVGElement>('[data-pin]').forEach((p) => p.classList.toggle('is-hot', p.dataset['pin'] === id));
+    list.querySelectorAll<HTMLElement>('[data-place]').forEach((a) => {
+      const id = a.dataset['place'] ?? null;
+      a.addEventListener('pointerenter', () => light(id));
+      a.addEventListener('focus', () => light(id));
+      a.addEventListener('pointerleave', () => light(null));
+      a.addEventListener('blur', () => light(null));
+    });
+  }
+</script>

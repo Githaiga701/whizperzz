@@ -1,0 +1,293 @@
+---
+import Admin from '@/layouts/Admin.astro';
+import SettingField from '@/components/admin/SettingField.astro';
+import { formObject, setFlash, str, takeFlash } from '@/lib/admin/web';
+import { ENV_MAP, fieldSource, type Section } from '@/lib/settings/store';
+import { getRuntime, reloadRuntime, log } from '@/lib/server/payments';
+import { pesapalReady } from '@/lib/payments/config';
+import { testEmail } from '@/lib/email/templates';
+
+export const prerender = false;
+
+const here = '/admin/settings/';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = str(form, 'action');
+  const rt = getRuntime();
+  let anchor = '';
+  try {
+    switch (action) {
+      case 'save_general':
+        rt.settings.saveGeneral(formObject(form, ['siteUrl', 'paymentsMode']));
+        setFlash(Astro.cookies, 'ok', 'Saved.');
+        anchor = '#general';
+        break;
+      case 'save_mpesa':
+        rt.settings.saveSection('mpesa', formObject(form, ['env', 'consumerKey', 'consumerSecret', 'shortcode', 'passkey', 'tillNumber', 'initiatorName', 'securityCredential']));
+        setFlash(Astro.cookies, 'ok', 'M-Pesa settings saved. Use “Test connection” to check them.');
+        anchor = '#mpesa';
+        break;
+      case 'save_pesapal':
+        rt.settings.saveSection('pesapal', formObject(form, ['env', 'consumerKey', 'consumerSecret']));
+        setFlash(Astro.cookies, 'ok', 'Pesapal settings saved. Test the connection, then register the IPN.');
+        anchor = '#pesapal';
+        break;
+      case 'save_email':
+        rt.settings.saveSection('email', formObject(form, ['host', 'port', 'secure', 'user', 'pass', 'from', 'notifyTo']));
+        setFlash(Astro.cookies, 'ok', 'Email settings saved. Send a test email to check them.');
+        anchor = '#email';
+        break;
+      case 'save_booking':
+        rt.settings.saveSection('booking', formObject(form, ['depositPercent', 'leadDays']));
+        setFlash(Astro.cookies, 'ok', 'Booking rules saved. Journey pages use them straight away.');
+        anchor = '#booking';
+        break;
+      case 'test_mpesa': {
+        const d = getRuntime().deps.daraja;
+        if (!d) throw new Error('Fill in and save the M-Pesa keys first.');
+        await d.ping();
+        setFlash(Astro.cookies, 'ok', 'M-Pesa connection works. Safaricom accepted your consumer key and secret.');
+        anchor = '#mpesa';
+        break;
+      }
+      case 'test_pesapal': {
+        const p = getRuntime().deps.pesapal;
+        if (!p) throw new Error('Fill in and save the Pesapal keys first.');
+        await p.ping();
+        setFlash(Astro.cookies, 'ok', 'Pesapal connection works. Pesapal accepted your consumer key and secret.');
+        anchor = '#pesapal';
+        break;
+      }
+      case 'register_ipn': {
+        const cur = getRuntime();
+        if (!cur.deps.pesapal || !cur.deps.config.pesapal) throw new Error('Fill in and save the Pesapal keys first.');
+        const res = await cur.deps.pesapal.registerIpn(cur.deps.config.pesapal.ipnUrl);
+        cur.settings.setPesapalIpnId(res.ipn_id);
+        setFlash(Astro.cookies, 'ok', 'Pesapal IPN registered. Card payments are switched on.');
+        anchor = '#pesapal';
+        break;
+      }
+      case 'test_email': {
+        const cur = getRuntime();
+        if (!cur.mailer) throw new Error('Fill in and save the email settings first.');
+        const to = str(form, 'to').trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new Error('Type the address to send the test to.');
+        await cur.mailer.verify();
+        await cur.mailer.send(testEmail(to));
+        setFlash(Astro.cookies, 'ok', `Test email sent to ${to}. Check that inbox (and spam).`);
+        anchor = '#email';
+        break;
+      }
+      default:
+        throw new Error('Unknown action.');
+    }
+  } catch (err) {
+    log('warn', 'Settings action failed', { action, error: (err as Error).message });
+    setFlash(Astro.cookies, 'error', (err as Error).message);
+    anchor = anchor || `#${action.replace(/^(save|test)_/, '').replace('register_ipn', 'pesapal')}`;
+  }
+  reloadRuntime();
+  return Astro.redirect(here + anchor);
+}
+
+const rt = getRuntime();
+const s = rt.settings.read();
+const config = rt.deps.config;
+const src = (section: Section, field: string) => fieldSource(s, process.env, section, field);
+/** Non-secret value coming from the environment, shown as a hint in the box. */
+const envOf = (section: Section, field: string) => process.env[(ENV_MAP[section] as Record<string, string>)[field]!];
+const flash = takeFlash(Astro.cookies);
+const welcome = Astro.url.searchParams.has('welcome');
+const siteUrl = s.siteUrl ?? '';
+const detectedUrl = Astro.url.origin;
+const local = /localhost|127\.0\.0\.1/.test(config.siteUrl);
+
+const booking = rt.booking;
+const status = [
+  {
+    name: 'M-Pesa',
+    ok: Boolean(config.mpesa),
+    text: config.mpesa ? `On (${config.mpesa.baseUrl.includes('sandbox') ? 'sandbox' : 'live'})${config.mpesa.reversal ? ', refunds on' : ', refunds off'}` : 'Off: add your Daraja keys below',
+  },
+  {
+    name: 'Card (Pesapal)',
+    ok: pesapalReady(config),
+    text: pesapalReady(config) ? `On (${config.pesapal!.baseUrl.includes('cybqa') ? 'sandbox' : 'live'})` : config.pesapal ? 'Almost: press “Register IPN”' : 'Off: add your Pesapal keys below',
+  },
+  { name: 'Email', ok: Boolean(rt.email), text: rt.email ? `On, sending from ${rt.email.from}` : 'Off: add your mail server below' },
+];
+---
+
+<Admin title="Settings" active="settings" flash={flash}>
+  <div class="admin-head">
+    <div>
+      <h1>Settings</h1>
+      <p>Payment and email accounts. Saved on the server; secret keys are never shown again after saving.</p>
+    </div>
+  </div>
+
+  {
+    welcome && (
+      <div class="panel" style="margin-bottom:20px;border-color:var(--grass)">
+        <h2>You’re in. Three things to set up</h2>
+        <ol style="margin:0;padding-left:20px;display:grid;gap:6px">
+          <li><strong>Site address</strong>: the public https address of your website.</li>
+          <li><strong>M-Pesa</strong> and/or <strong>Pesapal</strong>: paste your keys, then press Test connection.</li>
+          <li><strong>Email</strong>: so guests get receipts and you get payment alerts.</li>
+        </ol>
+      </div>
+    )
+  }
+
+  <nav class="settings-nav" aria-label="Settings sections">
+    <a href="#general">Site</a><a href="#booking">Booking</a><a href="#mpesa">M-Pesa</a><a href="#pesapal">Pesapal</a><a href="#email">Email</a>
+  </nav>
+
+  <div class="panel" style="margin-bottom:20px">
+    <h2>Status</h2>
+    <ul class="status-list">
+      {status.map((x) => (
+        <li><span class:list={['badge', x.ok ? 'badge--paid' : 'badge--awaiting_payment']}>{x.ok ? 'On' : 'Off'}</span><strong>{x.name}</strong> {x.text}</li>
+      ))}
+    </ul>
+    {local && <p class="hint" style="margin:0">Your site address is on this computer ({config.siteUrl}). M-Pesa and Pesapal can’t send results there, so payments will only confirm when you check them by hand. Use your public https address once the site is online.</p>}
+  </div>
+
+  <section class="panel" id="general" aria-labelledby="general-h">
+    <h2 id="general-h">Site</h2>
+    <form method="post" class="admin-form">
+      <input type="hidden" name="action" value="save_general" />
+      <label class="field">
+        <span>Site address {!siteUrl && process.env['SITE_URL'] && <span class="source"> · from environment</span>}</span>
+        <span class="hint">The public address guests visit, e.g. https://whizperz.co.ke. Pay links and payment results use it.</span>
+        <input name="siteUrl" value={siteUrl} placeholder={process.env['SITE_URL'] ?? detectedUrl} />
+      </label>
+      {!siteUrl && <p class="hint" style="margin:0">You’re using this site at <span class="code">{detectedUrl}</span>. If that’s the public address, type it above.</p>}
+      <label class="field">
+        Payments mode
+        <select name="paymentsMode">
+          <option value="sandbox" selected={config.mode === 'sandbox'}>Sandbox (testing, no real money)</option>
+          <option value="production" selected={config.mode === 'production'}>Live (real payments)</option>
+        </select>
+        <span class="hint">M-Pesa and Pesapal can each be set differently below.</span>
+      </label>
+      <button class="button button--small" type="submit">Save</button>
+    </form>
+  </section>
+
+  <section class="panel" id="booking" aria-labelledby="booking-h">
+    <h2 id="booking-h">Online booking</h2>
+    <p class="hint">How guests book and pay from a journey page. Prices themselves are set on each journey in <a href="/admin/packages/">Packages</a>.</p>
+    <form method="post" class="admin-form">
+      <input type="hidden" name="action" value="save_booking" />
+      <div class="two">
+        <SettingField name="depositPercent" label="Deposit (%)" type="number" hint={`Guests can pay this share now and the rest later. 0 or 100 means they always pay in full. Now: ${booking.depositPercent}%.`} placeholder="30" value={s.booking?.depositPercent} source={src('booking', 'depositPercent')} envValue={envOf('booking', 'depositPercent')} />
+        <SettingField name="leadDays" label="Book at least this many days ahead" type="number" hint={`Closer trips need a message first. Now: ${booking.leadDays} day${booking.leadDays === 1 ? '' : 's'}.`} placeholder="3" value={s.booking?.leadDays} source={src('booking', 'leadDays')} envValue={envOf('booking', 'leadDays')} />
+      </div>
+      <button class="button button--small" type="submit">Save booking rules</button>
+    </form>
+  </section>
+
+  <section class="panel" id="mpesa" aria-labelledby="mpesa-h">
+    <h2 id="mpesa-h">M-Pesa (Safaricom Daraja)</h2>
+    <p class="hint">From <a href="https://developer.safaricom.co.ke" target="_blank" rel="noopener">developer.safaricom.co.ke</a> → My Apps. For testing, the sandbox shortcode is 174379 and its passkey is on the M-Pesa Express simulator page.</p>
+    <form method="post" class="admin-form">
+      <input type="hidden" name="action" value="save_mpesa" />
+      <label class="field">
+        Environment
+        <select name="env">
+          <option value="" selected={!s.mpesa?.env}>Same as payments mode</option>
+          <option value="sandbox" selected={s.mpesa?.env === 'sandbox'}>Sandbox</option>
+          <option value="production" selected={s.mpesa?.env === 'production'}>Live</option>
+        </select>
+      </label>
+      <div class="two">
+        <SettingField name="consumerKey" label="Consumer key" value={s.mpesa?.consumerKey} source={src('mpesa', 'consumerKey')} envValue={envOf('mpesa', 'consumerKey')} />
+        <SettingField name="consumerSecret" label="Consumer secret" secret source={src('mpesa', 'consumerSecret')} />
+      </div>
+      <div class="two">
+        <SettingField name="shortcode" label="Business shortcode" hint="Paybill number, or the store number for a till." value={s.mpesa?.shortcode} source={src('mpesa', 'shortcode')} envValue={envOf('mpesa', 'shortcode')} />
+        <SettingField name="passkey" label="Passkey" hint="M-Pesa Express (STK) passkey." secret source={src('mpesa', 'passkey')} />
+      </div>
+      <SettingField name="tillNumber" label="Till number" hint="Only for a Buy Goods till. Leave empty for a Paybill." value={s.mpesa?.tillNumber} source={src('mpesa', 'tillNumber')} envValue={envOf('mpesa', 'tillNumber')} />
+      <fieldset style="border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px 14px;display:grid;gap:12px">
+        <legend style="font-weight:600;padding:0 6px">For refunds (optional)</legend>
+        <p class="hint" style="margin:0">Create an API user on the M-Pesa org portal with the Reversal role, then generate its security credential on the Daraja portal.</p>
+        <div class="two">
+          <SettingField name="initiatorName" label="Initiator name" value={s.mpesa?.initiatorName} source={src('mpesa', 'initiatorName')} envValue={envOf('mpesa', 'initiatorName')} />
+          <SettingField name="securityCredential" label="Security credential" secret source={src('mpesa', 'securityCredential')} />
+        </div>
+      </fieldset>
+      <div class="actions">
+        <button class="button button--small" type="submit">Save M-Pesa</button>
+      </div>
+    </form>
+    <div class="actions" style="margin-top:12px">
+      <form method="post"><input type="hidden" name="action" value="test_mpesa" /><button class="button button--small button--ghost" type="submit" disabled={!config.mpesa}>Test connection</button></form>
+    </div>
+    {config.mpesa && <p class="hint">Payment results go to: <span class="code">{config.mpesa.callbackUrl.replace(config.mpesa.callbackSecret, '••••')}</span></p>}
+  </section>
+
+  <section class="panel" id="pesapal" aria-labelledby="pesapal-h">
+    <h2 id="pesapal-h">Card payments (Pesapal)</h2>
+    <p class="hint">From <a href="https://developer.pesapal.com" target="_blank" rel="noopener">developer.pesapal.com</a> (sandbox demo keys) or your Pesapal merchant dashboard (live).</p>
+    <form method="post" class="admin-form">
+      <input type="hidden" name="action" value="save_pesapal" />
+      <label class="field">
+        Environment
+        <select name="env">
+          <option value="" selected={!s.pesapal?.env}>Same as payments mode</option>
+          <option value="sandbox" selected={s.pesapal?.env === 'sandbox'}>Sandbox</option>
+          <option value="production" selected={s.pesapal?.env === 'production'}>Live</option>
+        </select>
+      </label>
+      <div class="two">
+        <SettingField name="consumerKey" label="Consumer key" value={s.pesapal?.consumerKey} source={src('pesapal', 'consumerKey')} envValue={envOf('pesapal', 'consumerKey')} />
+        <SettingField name="consumerSecret" label="Consumer secret" secret source={src('pesapal', 'consumerSecret')} />
+      </div>
+      <div class="actions"><button class="button button--small" type="submit">Save Pesapal</button></div>
+    </form>
+    <div class="actions" style="margin-top:12px">
+      <form method="post"><input type="hidden" name="action" value="test_pesapal" /><button class="button button--small button--ghost" type="submit" disabled={!config.pesapal}>Test connection</button></form>
+      <form method="post"><input type="hidden" name="action" value="register_ipn" /><button class="button button--small button--ghost" type="submit" disabled={!config.pesapal}>{config.pesapal?.ipnId ? 'Register IPN again' : 'Register IPN'}</button></form>
+    </div>
+    <p class="hint">
+      {config.pesapal?.ipnId ? <>IPN registered (<span class="code">{config.pesapal.ipnId}</span>). Do it again if you change the site address.</> : 'Registering the IPN tells Pesapal where to send payment results. Card payments switch on once it’s done.'}
+    </p>
+  </section>
+
+  <section class="panel" id="email" aria-labelledby="email-h">
+    <h2 id="email-h">Email</h2>
+    <p class="hint">Any email provider with SMTP works: your web host’s mail, Google Workspace, Zoho, Brevo, Mailgun… For Gmail, turn on 2-step verification and use an app password.</p>
+    <form method="post" class="admin-form">
+      <input type="hidden" name="action" value="save_email" />
+      <div class="two">
+        <SettingField name="host" label="Mail server (SMTP host)" placeholder="smtp.example.com" value={s.email?.host} source={src('email', 'host')} envValue={envOf('email', 'host')} />
+        <SettingField name="port" label="Port" placeholder="587" value={s.email?.port} source={src('email', 'port')} envValue={envOf('email', 'port')} />
+      </div>
+      <label class="field">
+        Secure connection
+        <select name="secure">
+          <option value="" selected={!s.email?.secure}>Automatic (SSL on port 465, STARTTLS otherwise)</option>
+          <option value="yes" selected={s.email?.secure === 'yes'}>SSL/TLS</option>
+          <option value="no" selected={s.email?.secure === 'no'}>STARTTLS or none</option>
+        </select>
+      </label>
+      <div class="two">
+        <SettingField name="user" label="Username" value={s.email?.user} source={src('email', 'user')} envValue={envOf('email', 'user')} />
+        <SettingField name="pass" label="Password" secret source={src('email', 'pass')} />
+      </div>
+      <div class="two">
+        <SettingField name="from" label="Send from" placeholder="Whizperz Tours <bookings@whizperz.co.ke>" value={s.email?.from} source={src('email', 'from')} />
+        <SettingField name="notifyTo" label="Send payment alerts to" hint="Your team’s address. Leave empty for no alerts." value={s.email?.notifyTo} source={src('email', 'notifyTo')} envValue={envOf('email', 'notifyTo')} />
+      </div>
+      <div class="actions"><button class="button button--small" type="submit">Save email</button></div>
+    </form>
+    <form method="post" class="copy-row" style="margin-top:12px">
+      <input type="hidden" name="action" value="test_email" />
+      <input name="to" type="email" placeholder="Send a test to…" aria-label="Test email address" value={rt.email?.notifyTo ?? ''} />
+      <button class="button button--small button--ghost" type="submit" disabled={!rt.email}>Send test email</button>
+    </form>
+  </section>
+</Admin>

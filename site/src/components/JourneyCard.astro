@@ -1,0 +1,38 @@
+---
+import { STYLE_LABEL, routeLabel, type TripPackage } from '@/lib/packages/store';
+import { kes } from '@/lib/packages/pricing';
+
+interface Props {
+  pkg: TripPackage;
+  /** Destination id → name. */
+  names: (id: string) => string;
+  headingLevel?: 'h2' | 'h3';
+}
+
+const { pkg, names, headingLevel: H = 'h3' } = Astro.props;
+const places = routeLabel(pkg.route, names);
+const price = pkg.pricing.adultKes;
+---
+
+<article
+  class="journey-card"
+  data-filter-item
+  data-tags={pkg.styles.join(' ')}
+  data-days={pkg.days}
+  data-search={`${pkg.name} ${places} ${pkg.summary} ${pkg.styles.join(' ')}`.toLowerCase()}
+  data-tilt
+>
+  <div class="journey-card-photo">
+    <img src={pkg.photo.src} alt={pkg.photo.alt} loading="lazy" decoding="async" width="900" height="675" />
+  </div>
+  <span class="days-badge">{pkg.days} days</span>
+  <div class="journey-card-body">
+    <p class="journey-card-route">{places}</p>
+    <H><a href={`/packages/${pkg.id}/`}>{pkg.name}</a></H>
+    <p>{pkg.summary}</p>
+    <div class="journey-card-foot">
+      <span>{pkg.styles.map((s) => STYLE_LABEL[s]).join(', ')}</span>
+      {price ? <strong>From {kes(price)} <small>per person</small></strong> : <strong>Priced to your dates</strong>}
+    </div>
+  </div>
+</article>

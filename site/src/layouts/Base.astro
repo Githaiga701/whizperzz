@@ -1,0 +1,72 @@
+---
+import '@fontsource/gloock/400.css';
+import '@fontsource/hanken-grotesk/400.css';
+import '@fontsource/hanken-grotesk/500.css';
+import '@fontsource/hanken-grotesk/600.css';
+import '@fontsource/hanken-grotesk/700.css';
+import '@fontsource/nanum-pen-script/400.css';
+import '@/styles/global.css';
+import Header from '@/components/Header.astro';
+import Footer from '@/components/Footer.astro';
+import ContactDock from '@/components/ContactDock.astro';
+import { site } from '@/config/site';
+
+interface Props {
+  title: string;
+  description?: string;
+  /** Preloads the hero photo for a faster first paint. */
+  heroImage?: string;
+  /** Keeps private pages (like pay links) out of search engines. */
+  noindex?: boolean;
+  /** The floating Call / Email / WhatsApp bar. Off where it would cover a form, like pay links. */
+  contactDock?: boolean;
+}
+
+const { title, description = site.description, heroImage, noindex = false, contactDock = true } = Astro.props;
+const fullTitle = title === site.name ? `${site.name} | Kenya safaris & coast` : `${title} | ${site.shortName}`;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#2a2017" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    {noindex ? <meta name="robots" content="noindex, nofollow" /> : <link rel="canonical" href={canonical} />}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    {heroImage && <meta property="og:image" content={heroImage} />}
+    {heroImage && <link rel="preload" as="image" href={heroImage} fetchpriority="high" />}
+    <script is:inline>
+      // Movement is opt-out: skipped entirely when the device asks for reduced motion.
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) document.documentElement.classList.add('motion');
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <Header />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer />
+    {contactDock && <ContactDock />}
+    <script>
+      import '@/scripts/motion';
+    </script>
+    <script is:inline define:vars={{ langs: site.translateLanguages.join(',') }}>
+      window.googleTranslateElementInit = function () {
+        // eslint-disable-next-line no-undef
+        new google.translate.TranslateElement(
+          { pageLanguage: 'en', includedLanguages: langs, layout: google.translate.TranslateElement.InlineLayout.SIMPLE, autoDisplay: false },
+          'google_translate_element'
+        );
+      };
+    </script>
+    <script is:inline src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" async></script>
+  </body>
+</html>

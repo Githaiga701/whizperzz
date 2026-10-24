@@ -1,0 +1,46 @@
+---
+import Admin from '@/layouts/Admin.astro';
+import PackageForm from '@/components/admin/PackageForm.astro';
+import { setFlash } from '@/lib/admin/web';
+import { PackageError, slugify, validatePackage } from '@/lib/packages/store';
+import { emptyValues, valuesFromInput } from '@/lib/packages/form-values';
+import { getDestinations } from '@/lib/content';
+import { getPackageStore } from '@/lib/server/packages';
+import { readPackageForm } from '@/lib/server/package-form';
+import { getRuntime, log } from '@/lib/server/payments';
+
+export const prerender = false;
+
+const places = (await getDestinations()).map((d) => ({ id: d.id, name: d.data.name }));
+let values = emptyValues();
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const hint = slugify(String(form.get('id') || form.get('name') || 'journey'));
+  try {
+    const { input, photoError } = await readPackageForm(form, hint);
+    values = valuesFromInput(input);
+    if (photoError) throw new PackageError(photoError);
+    const pkg = validatePackage(input, places.map((p) => p.id));
+    await getPackageStore().create(pkg);
+    log('info', 'Package created', { id: pkg.id, by: Astro.locals.admin });
+    setFlash(Astro.cookies, 'ok', `“${pkg.name}” created${pkg.published ? ' and live on the website' : ' as a draft'}.`);
+    return Astro.redirect(`/admin/packages/${pkg.id}/`);
+  } catch (err) {
+    if (!(err instanceof PackageError)) throw err;
+    error = err.message;
+  }
+}
+---
+
+<Admin title="New journey" active="packages" flash={error ? { kind: 'error', text: error } : undefined}>
+  <div class="admin-head">
+    <div>
+      <p style="margin:0"><a href="/admin/packages/">← All packages</a></p>
+      <h1>New journey</h1>
+      <p>Fill this in and it appears on the Journeys page once you tick “Show on the website”.</p>
+    </div>
+  </div>
+  <PackageForm values={values} places={places} mode="new" depositPercent={getRuntime().booking.depositPercent} />
+</Admin>

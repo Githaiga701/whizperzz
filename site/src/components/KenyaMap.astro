@@ -1,0 +1,137 @@
+---
+import {
+  MAP_HEIGHT,
+  MAP_WIDTH,
+  NAIROBI,
+  equatorY,
+  kenyaPath,
+  project,
+  routePath,
+  turkanaPath,
+  victoriaPath,
+} from '@/lib/geo';
+
+import type { MapPin } from '@/lib/geo';
+export type { MapPin };
+
+interface Props {
+  pins: MapPin[];
+  /** links: pins link to pages. static: just a picture. interactive: pins are toggle buttons (used by the route sketcher). */
+  mode?: 'links' | 'static' | 'interactive';
+  /** Destination ids, in order. Drawn as a route from Nairobi and back. */
+  route?: string[];
+  /** Destination ids to emphasise. */
+  highlight?: string[];
+  label: string;
+  /** Unique per page when several maps are shown. */
+  uid?: string;
+}
+
+const { pins, mode = 'static', route = [], highlight = [], label, uid = 'map' } = Astro.props;
+
+const placed = pins.map((p) => ({ ...p, ...project(p.lon, p.lat) }));
+const byId = new Map(placed.map((p) => [p.id, p]));
+const routePoints = route.map((id) => byId.get(id)).filter((p) => p !== undefined);
+const outbound = routePoints.length ? routePath([NAIROBI, ...routePoints]) : '';
+const last = routePoints.at(-1);
+const back = last ? routePath([last, NAIROBI]) : '';
+
+const mtKenya = project(37.31, -0.15);
+const kili = project(37.35, -3.07);
+const turkanaLabel = project(35.2, 3.3);
+const victoriaLabel = project(33.45, -1.55);
+const oceanLabel = project(40.4, -4.5);
+const pad = 14;
+// A map with links or buttons in it is a group of controls, not a single picture.
+const role = mode === 'static' ? 'img' : 'group';
+---
+
+<svg
+  class="kenya-map"
+  viewBox={`${-pad} ${-pad} ${MAP_WIDTH + pad * 2} ${MAP_HEIGHT + pad * 2}`}
+  role={role}
+  aria-label={label}
+  data-map={uid}
+  data-animate={mode === 'interactive' ? undefined : ''}
+>
+  <defs>
+    <filter id={`rough-${uid}`} x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7" />
+      <feDisplacementMap in="SourceGraphic" scale="3" />
+    </filter>
+    <clipPath id={`frame-${uid}`}>
+      <rect x={-pad} y={-pad} width={MAP_WIDTH + pad * 2} height={MAP_HEIGHT + pad * 2} />
+    </clipPath>
+    <mask id={`route-mask-${uid}`} maskUnits="userSpaceOnUse">
+      <path class="route-mask" d={outbound} data-route-mask />
+    </mask>
+  </defs>
+
+  <g filter={`url(#rough-${uid})`} clip-path={`url(#frame-${uid})`} aria-hidden="true">
+    <path class="water" d={victoriaPath} />
+    <path class="land" d={kenyaPath} />
+    <path class="water" d={turkanaPath} />
+    <line class="equator" x1="-10" x2={MAP_WIDTH + 10} y1={equatorY} y2={equatorY} />
+    <path class="land" style="fill:none;stroke-width:1.4" d={`M${mtKenya.x - 11} ${mtKenya.y + 7} L${mtKenya.x} ${mtKenya.y - 9} L${mtKenya.x + 11} ${mtKenya.y + 7}`} />
+    <path class="land" style="fill:none;stroke-width:1.2;stroke-opacity:.6" d={`M${kili.x - 12} ${kili.y + 8} L${kili.x - 3} ${kili.y - 6} L${kili.x + 3} ${kili.y - 2} L${kili.x + 12} ${kili.y + 8}`} />
+  </g>
+
+  <g aria-hidden="true">
+    <text class="map-note" x={MAP_WIDTH - 4} y={equatorY - 7} text-anchor="end">equator</text>
+    <text class="map-note" x={turkanaLabel.x} y={turkanaLabel.y} text-anchor="end">Lake Turkana</text>
+    <text class="map-note" x={victoriaLabel.x} y={victoriaLabel.y} style="font-size:18px">L. Victoria</text>
+    <text class="map-note map-note--sea" x={oceanLabel.x + 10} y={oceanLabel.y + 8}>Indian Ocean</text>
+    <text class="map-note" x={kili.x - 6} y={kili.y + 26} style="font-size:19px" text-anchor="middle">Kili</text>
+  </g>
+
+  <g aria-hidden="true">
+    <path class="route route-return" d={back} data-route-return />
+    <g mask={`url(#route-mask-${uid})`}>
+      <path class="route" d={outbound} data-route />
+    </g>
+  </g>
+
+  <g class="city" aria-hidden="true">
+    <circle cx={NAIROBI.x} cy={NAIROBI.y} r="5" />
+    <text x={NAIROBI.x + 10} y={NAIROBI.y + 18}>Nairobi</text>
+  </g>
+
+  {
+    placed.map((p) => {
+      const anchor = p.labelSide === 'left' ? 'end' : 'start';
+      const lx = p.labelSide === 'left' ? p.x - 15 : p.x + 15;
+      const order = route.indexOf(p.id);
+      const on = highlight.includes(p.id) || order >= 0;
+      const inner = (
+        <>
+          <circle class="pin-dot" cx={p.x} cy={p.y} r="7" />
+          <text class="pin-order" x={p.x} y={p.y + 4} text-anchor="middle" data-order>
+            {mode === 'interactive' ? '' : order >= 0 && route.length > 1 ? order + 1 : ''}
+          </text>
+          <text class="pin-label" x={lx} y={p.y + 7} text-anchor={anchor}>
+            {p.name}
+          </text>
+        </>
+      );
+      if (mode === 'links' && p.href) {
+        return (
+          <a class:list={['pin', on && 'is-on']} href={p.href} data-pin={p.id} aria-label={p.name}>
+            {inner}
+          </a>
+        );
+      }
+      if (mode === 'interactive') {
+        return (
+          <g class="pin" role="button" tabindex="0" aria-pressed="false" aria-label={`Add ${p.name} to your route`} data-pin={p.id}>
+            {inner}
+          </g>
+        );
+      }
+      return (
+        <g class:list={['pin', on && 'is-on']} data-pin={p.id}>
+          {inner}
+        </g>
+      );
+    })
+  }
+</svg>

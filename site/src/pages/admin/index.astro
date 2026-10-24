@@ -1,0 +1,97 @@
+---
+import Admin from '@/layouts/Admin.astro';
+import { takeFlash } from '@/lib/admin/web';
+import { filterQuotes, needsAttention, summarise } from '@/lib/payments/service';
+import { getPaymentDeps } from '@/lib/server/payments';
+import { formatKes } from '@/lib/enquiry';
+import { STATUS_LABEL, shortDate } from '@/lib/admin/labels';
+
+export const prerender = false;
+
+const deps = getPaymentDeps();
+const all = await deps.store.list();
+const q = Astro.url.searchParams.get('q') ?? '';
+const status = Astro.url.searchParams.get('status') ?? 'all';
+const quotes = filterQuotes(all, { q, status });
+const stats = summarise(all, deps.now());
+const flash = takeFlash(Astro.cookies);
+---
+
+<Admin title="Quotes" active="quotes" flash={flash}>
+  <div class="admin-head">
+    <div>
+      <h1>Quotes</h1>
+      <p>Every quote you’ve sent, newest first.</p>
+    </div>
+    <a class="button" href="/admin/quotes/new/">New quote</a>
+  </div>
+
+  <div class="stats">
+    <a class="stat" href="?status=awaiting_payment"><strong>{stats.awaiting}</strong><span>Waiting for payment</span></a>
+    <div class="stat"><strong>{formatKes(stats.paidThisMonthKes)}</strong><span>Paid this month ({stats.paidThisMonthCount})</span></div>
+    <a class:list={['stat', stats.needsAttention > 0 && 'stat--alert']} href="?status=attention"><strong>{stats.needsAttention}</strong><span>Need checking</span></a>
+    <div class="stat"><strong>{stats.refundsPending}</strong><span>Refunds in progress</span></div>
+  </div>
+
+  <form class="toolbar" method="get" role="search">
+    <label class="field">Search<input name="q" value={q} type="search" placeholder="Name, reference, receipt, phone…" /></label>
+    <label class="field" style="flex:0 1 auto">
+      Show
+      <select name="status">
+        <option value="all" selected={status === 'all'}>All quotes</option>
+        <option value="awaiting_payment" selected={status === 'awaiting_payment'}>Waiting for payment</option>
+        <option value="paid" selected={status === 'paid'}>Paid</option>
+        <option value="attention" selected={status === 'attention'}>Need checking</option>
+        <option value="refunded" selected={status === 'refunded'}>Refunded</option>
+        <option value="cancelled" selected={status === 'cancelled'}>Cancelled</option>
+      </select>
+    </label>
+    <button class="button button--ghost" type="submit">Filter</button>
+  </form>
+
+  <div class="table-wrap">
+    {
+      quotes.length === 0 ? (
+        <p class="empty">
+          {all.length === 0 ? (
+            <>No quotes yet. <a class="link" href="/admin/quotes/new/">Create your first quote</a> and send the pay link to your guest.</>
+          ) : (
+            'No quotes match. Try another search or filter.'
+          )}
+        </p>
+      ) : (
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th scope="col">Reference</th>
+              <th scope="col">Guest</th>
+              <th scope="col" class="hide-sm">Trip</th>
+              <th scope="col" class="num">Amount</th>
+              <th scope="col">Status</th>
+              <th scope="col" class="hide-sm">Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {quotes.map((x) => (
+              <tr>
+                <td><a href={`/admin/quotes/${x.ref}/`}>{x.ref}</a></td>
+                <td>
+                  {x.guestName}
+                  {x.email && <small>{x.email}</small>}
+                  <small class="show-sm">{x.description}</small>
+                </td>
+                <td class="hide-sm">{x.description}</td>
+                <td class="num">{formatKes(x.amountKes)}</td>
+                <td>
+                  <span class:list={['badge', `badge--${x.status}`]}>{STATUS_LABEL[x.status]}</span>
+                  {needsAttention(x) && <span class="badge badge--attention">Check</span>}
+                </td>
+                <td class="hide-sm">{shortDate(x.createdAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
+  </div>
+</Admin>

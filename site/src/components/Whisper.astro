@@ -1,0 +1,56 @@
+---
+interface Props {
+  text: string;
+  /** Who or where the note is from. */
+  from?: string;
+  tilt?: number;
+  /** Writes itself in, once, when the page loads. Use for one note per page at most. */
+  typing?: boolean;
+  class?: string;
+}
+
+const { text, from = 'From the road', tilt = -1.5, typing = false, class: className } = Astro.props;
+---
+
+<figure
+  class:list={['whisper', typing && 'whisper--typing', className]}
+  style={`--tilt:${tilt}deg`}
+  data-typing={typing ? '' : undefined}
+>
+  <blockquote>
+    {typing ? (
+      <>
+        <span class="visually-hidden">{text}</span>
+        <span aria-hidden="true">{[...text].map((c) => <span class="ch">{c}</span>)}</span>
+      </>
+    ) : (
+      text
+    )}
+  </blockquote>
+  <figcaption>{from}</figcaption>
+</figure>
+
+{
+  typing && (
+    <script>
+      const note = document.querySelector<HTMLElement>('[data-typing]');
+      if (note) {
+        const chars = [...note.querySelectorAll<HTMLElement>('.ch')];
+        const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduce) {
+          chars.forEach((c) => c.classList.add('on'));
+        } else {
+          let i = 0;
+          const tick = () => {
+            const c = chars[i++];
+            if (!c) return;
+            c.classList.add('on');
+            const pause = /[.,]/.test(c.textContent ?? '') ? 260 : 34;
+            window.setTimeout(tick, pause);
+          };
+          window.setTimeout(tick, 700);
+        }
+      }
+    </script>
+  )
+}

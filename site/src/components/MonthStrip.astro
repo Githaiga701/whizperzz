@@ -1,0 +1,14 @@
+---
+import { MONTHS } from '@/lib/enquiry';
+
+interface Props {
+  good: number[];
+}
+const { good } = Astro.props;
+const goodNames = good.map((m) => MONTHS[m - 1]).join(', ');
+---
+
+<div class="months" role="img" aria-label={`Good months to visit: ${goodNames}`}>
+  {MONTHS.map((m, i) => <span class:list={[good.includes(i + 1) && 'good']} title={m}>{m.charAt(0)}</span>)}
+</div>
+<p class="months-key">Shaded months are usually the driest and easiest for travel.</p>

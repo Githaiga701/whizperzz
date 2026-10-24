@@ -1,0 +1,28 @@
+---
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import EnquiryForm from '@/components/EnquiryForm.astro';
+import { site } from '@/config/site';
+import { prettyPhone } from '@/lib/enquiry';
+
+const c = site.contact;
+---
+
+<Base title="Plan your trip" description="Get in touch with Whizperz Tours & Safaris in Nairobi to start planning your Kenya trip.">
+  <PageHero title="Tell us where you’d like to wake up." kicker="Let’s plan" intro="Your next Kenya story starts with a conversation." />
+  <section class="section" style="padding-top:0">
+    <div class="wrap contact-grid">
+      <div>
+        <p class="lede">Share your dates, places you’ve heard about and the kind of trip you love. A real person will reply, usually within a day.</p>
+        <ul class="contact-lines">
+          {c.whatsapp && <li><span>WhatsApp</span><a href={`https://wa.me/${c.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">{prettyPhone(c.whatsapp)}</a></li>}
+          {c.phone && <li><span>Call</span><a href={`tel:${c.phone}`}>{prettyPhone(c.phone)}</a></li>}
+          {c.email && <li><span>Email</span><a href={`mailto:${c.email}`}>{c.email}</a></li>}
+          <li><span>Visit</span><strong>{c.address}</strong></li>
+        </ul>
+        <p style="margin-top:28px">Prefer to draw it? <a class="link" href="/plan/">Sketch your route on the map</a></p>
+      </div>
+      <EnquiryForm />
+    </div>
+  </section>
+</Base>

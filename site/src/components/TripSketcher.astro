@@ -1,0 +1,275 @@
+---
+import KenyaMap from './KenyaMap.astro';
+import type { Destination } from '@/lib/content';
+import { toPin } from '@/lib/content';
+import { project } from '@/lib/geo';
+import { MONTHS } from '@/lib/enquiry';
+
+interface Props {
+  destinations: Destination[];
+  title?: string;
+  intro?: string;
+}
+
+const {
+  destinations,
+  title = 'Sketch your own route',
+  intro = 'Tap places on the map to add them, set the nights, then send it to us. We’ll come back with a real plan: stays, drives, flights and a price.',
+} = Astro.props;
+
+const data = destinations.map((d) => ({
+  id: d.id,
+  name: d.data.name,
+  tagline: d.data.tagline,
+  nights: d.data.suggestedNights,
+  ...project(d.data.lon, d.data.lat),
+}));
+---
+
+<section class="section section--dark" id="sketch" aria-labelledby="sketch-title">
+  <div class="wrap sketcher" data-sketcher data-places={JSON.stringify(data)}>
+    <div class="sketcher-map">
+      <KenyaMap pins={destinations.map(toPin)} mode="interactive" uid="sketch" label="Map of Kenya. Choose places to add them to your route." />
+      <p class="map-hint" aria-hidden="true">every route starts and ends in Nairobi</p>
+    </div>
+
+    <div class="sketcher-panel">
+      <span class="kicker">Your trip, your way</span>
+      <h2 id="sketch-title">{title}</h2>
+      <p>{intro}</p>
+
+      <fieldset class="stop-picker">
+        <legend>Places</legend>
+        {data.map((p) => <button type="button" class="chip" aria-pressed="false" data-chip={p.id}>{p.name}</button>)}
+      </fieldset>
+
+      <div class="route-card">
+        <h3>Your route <span class="route-total" data-total aria-live="polite"></span></h3>
+        <p class="route-empty" data-empty>Nothing yet. Pick a place to start drawing.</p>
+        <ol class="route-list" data-list></ol>
+      </div>
+
+      <form class="sketch-fields" data-sketch-form>
+        <label class="field">
+          When
+          <select name="month">
+            <option value="">Not sure yet</option>
+            {MONTHS.map((m) => <option>{m}</option>)}
+          </select>
+        </label>
+        <label class="field">
+          Travellers
+          <input name="travellers" type="number" min="1" max="40" inputmode="numeric" placeholder="2" />
+        </label>
+        <label class="field full">
+          Style
+          <select name="style">
+            <option value="">Not sure yet</option>
+            <option>Private trip</option>
+            <option>Small group</option>
+            <option>Family trip</option>
+          </select>
+        </label>
+        <div class="full button-row">
+          <button class="button button--whatsapp" type="submit" value="whatsapp">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 11.7a8 8 0 0 1-11.8 7L4 20l1.3-4A8 8 0 1 1 20 11.7Z" /></svg>
+            Send route on WhatsApp
+          </button>
+          <button class="button button--outline-light" type="submit" value="email">Email it instead</button>
+        </div>
+        <p class="form-status full" data-status role="status"></p>
+        <p class="form-note full">This opens WhatsApp or your email app with your route written out. Nothing is stored on this website.</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<script>
+  import { NAIROBI, routePath, type Point } from '@/lib/geo';
+  import { emailUrl, formatEnquiry, whatsappUrl } from '@/lib/enquiry';
+
+  interface Place extends Point {
+    id: string;
+    name: string;
+    tagline: string;
+    nights: number;
+  }
+  interface Stop {
+    id: string;
+    nights: number;
+  }
+
+  const STORAGE_KEY = 'whizperz-route';
+  const root = document.querySelector<HTMLElement>('[data-sketcher]');
+
+  if (root) {
+    const places: Place[] = JSON.parse(root.dataset['places'] ?? '[]');
+    const byId = new Map(places.map((p) => [p.id, p]));
+    const svg = root.querySelector<SVGSVGElement>('[data-map="sketch"]')!;
+    const routeEl = svg.querySelector<SVGPathElement>('[data-route]')!;
+    const maskEl = svg.querySelector<SVGPathElement>('[data-route-mask]')!;
+    const returnEl = svg.querySelector<SVGPathElement>('[data-route-return]')!;
+    const list = root.querySelector<HTMLOListElement>('[data-list]')!;
+    const empty = root.querySelector<HTMLElement>('[data-empty]')!;
+    const total = root.querySelector<HTMLElement>('[data-total]')!;
+    const form = root.querySelector<HTMLFormElement>('[data-sketch-form]')!;
+    const status = root.querySelector<HTMLElement>('[data-status]')!;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    let stops: Stop[] = load();
+
+    // A destination page can link here with ?add=<id> to start a route with that place.
+    const add = new URLSearchParams(location.search).get('add');
+    if (add && byId.has(add) && !stops.some((s) => s.id === add)) {
+      stops.push({ id: add, nights: byId.get(add)!.nights });
+    }
+
+    function load(): Stop[] {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') as Stop[];
+        return Array.isArray(saved) ? saved.filter((s) => byId.has(s.id) && s.nights > 0) : [];
+      } catch {
+        return [];
+      }
+    }
+    function save() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(stops));
+      } catch {
+        /* storage unavailable: the route just won't be remembered */
+      }
+    }
+
+    function toggle(id: string) {
+      const i = stops.findIndex((s) => s.id === id);
+      if (i >= 0) stops.splice(i, 1);
+      else stops.push({ id, nights: byId.get(id)!.nights });
+      render(true);
+    }
+
+    function button(label: string, text: string, onClick: () => void, disabled = false) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'icon-btn';
+      b.textContent = text;
+      b.setAttribute('aria-label', label);
+      b.disabled = disabled;
+      b.addEventListener('click', onClick);
+      return b;
+    }
+
+    function homeRow(label: string) {
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="n n--home" aria-hidden="true">N</span><span class="stop-name">Nairobi<small>${label}</small></span>`;
+      return li;
+    }
+
+    function drawRoute(animate: boolean) {
+      const pts = stops.map((s) => byId.get(s.id)!);
+      const out = pts.length ? routePath([NAIROBI, ...pts]) : '';
+      const last = pts.at(-1);
+      routeEl.setAttribute('d', out);
+      maskEl.setAttribute('d', out);
+      returnEl.setAttribute('d', last ? routePath([last, NAIROBI]) : '');
+      maskEl.classList.remove('is-drawing');
+      maskEl.style.removeProperty('stroke-dasharray');
+      if (animate && out && !reduceMotion) {
+        const len = Math.ceil(maskEl.getTotalLength());
+        maskEl.style.setProperty('--len', String(len));
+        maskEl.style.strokeDasharray = String(len);
+        void maskEl.getBoundingClientRect();
+        maskEl.classList.add('is-drawing');
+      }
+    }
+
+    function render(animate = false) {
+      // Pins and chips
+      svg.querySelectorAll<SVGGElement>('[data-pin]').forEach((pin) => {
+        const id = pin.dataset['pin']!;
+        const order = stops.findIndex((s) => s.id === id);
+        const name = byId.get(id)?.name ?? id;
+        pin.classList.toggle('is-on', order >= 0);
+        pin.setAttribute('aria-pressed', String(order >= 0));
+        pin.setAttribute('aria-label', order >= 0 ? `Remove ${name} from your route` : `Add ${name} to your route`);
+        const num = pin.querySelector('[data-order]');
+        if (num) num.textContent = order >= 0 ? String(order + 1) : '';
+      });
+      root!.querySelectorAll<HTMLButtonElement>('[data-chip]').forEach((chip) => {
+        chip.setAttribute('aria-pressed', String(stops.some((s) => s.id === chip.dataset['chip'])));
+      });
+
+      // Route list
+      list.replaceChildren();
+      empty.hidden = stops.length > 0;
+      if (stops.length) {
+        list.append(homeRow('Start'));
+        stops.forEach((s, i) => {
+          const p = byId.get(s.id)!;
+          const li = document.createElement('li');
+          li.innerHTML = `<span class="n" aria-hidden="true">${i + 1}</span><span class="stop-name">${p.name}<small>${p.tagline}</small></span>`;
+          const controls = document.createElement('span');
+          controls.className = 'stop-controls';
+          const nights = document.createElement('span');
+          nights.className = 'nights';
+          nights.textContent = `${s.nights} night${s.nights === 1 ? '' : 's'}`;
+          controls.append(
+            button(`Fewer nights in ${p.name}`, '−', () => { s.nights--; render(); }, s.nights <= 1),
+            nights,
+            button(`More nights in ${p.name}`, '+', () => { s.nights++; render(); }, s.nights >= 14),
+            button(`Move ${p.name} earlier`, '↑', () => { [stops[i - 1], stops[i]] = [stops[i]!, stops[i - 1]!]; render(true); }, i === 0),
+            button(`Remove ${p.name}`, '×', () => { stops.splice(i, 1); render(true); }),
+          );
+          li.append(controls);
+          list.append(li);
+        });
+        list.append(homeRow('Home'));
+      }
+      const n = stops.reduce((sum, s) => sum + s.nights, 0);
+      total.textContent = stops.length ? `${n} night${n === 1 ? '' : 's'}, ${stops.length} place${stops.length === 1 ? '' : 's'}` : '';
+      status.textContent = '';
+      drawRoute(animate);
+      save();
+    }
+
+    svg.querySelectorAll<SVGGElement>('[data-pin]').forEach((pin) => {
+      const id = pin.dataset['pin']!;
+      pin.addEventListener('click', () => toggle(id));
+      pin.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggle(id);
+        }
+      });
+    });
+    root.querySelectorAll<HTMLButtonElement>('[data-chip]').forEach((chip) => {
+      chip.addEventListener('click', () => toggle(chip.dataset['chip']!));
+    });
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!stops.length) {
+        status.textContent = 'Add at least one place to your route first.';
+        return;
+      }
+      const fd = new FormData(form);
+      const travellers = Number(fd.get('travellers')) || undefined;
+      const text = formatEnquiry({
+        stops: stops.map((s) => ({ name: byId.get(s.id)!.name, nights: s.nights })),
+        month: String(fd.get('month') ?? '') || undefined,
+        style: String(fd.get('style') ?? '') || undefined,
+        ...(travellers ? { travellers } : {}),
+      });
+      const via = (e.submitter as HTMLButtonElement | null)?.value;
+      const url = via === 'email' ? emailUrl('My Whizperz route', text) : whatsappUrl(text);
+      if (!url) {
+        status.textContent = 'That contact option isn’t set up yet. Please use the other button.';
+        return;
+      }
+      if (via === 'email') location.href = url;
+      else window.open(url, '_blank', 'noopener');
+      status.textContent = via === 'email' ? 'Your email app should open with the route ready to send.' : 'WhatsApp should open with your route ready to send.';
+    });
+
+    render(stops.length > 0);
+  }
+</script>

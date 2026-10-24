@@ -1,0 +1,38 @@
+---
+import type { FieldSource } from '@/lib/settings/store';
+
+interface Props {
+  name: string;
+  label: string;
+  hint?: string;
+  /** Current value for normal fields. Never passed for secrets. */
+  value?: string | undefined;
+  secret?: boolean;
+  source: FieldSource;
+  type?: 'text' | 'email' | 'url' | 'number';
+  placeholder?: string;
+  required?: boolean;
+  /** For normal fields set by the host's environment: shown greyed out so you can see what's in use. */
+  envValue?: string | undefined;
+}
+
+const { name, label, hint, value = '', secret = false, source, type = 'text', placeholder, required = false, envValue } = Astro.props;
+const secretPlaceholder =
+  source === 'settings' ? 'Saved. Leave blank to keep it.' : source === 'environment' ? 'Set by the host’s environment. Type here to override.' : '';
+---
+
+<label class="field">
+  <span>
+    {label}
+    {source === 'environment' && <span class="source"> · from environment</span>}
+    {secret && source === 'settings' && <span class="source"> · saved</span>}
+  </span>
+  {hint && <span class="hint">{hint}</span>}
+  {
+    secret ? (
+      <input name={name} type="password" autocomplete="new-password" placeholder={secretPlaceholder || placeholder} required={required && source === 'none'} />
+    ) : (
+      <input name={name} type={type} value={value} placeholder={source === 'environment' && envValue ? envValue : placeholder} autocomplete="off" required={required} />
+    )
+  }
+</label>

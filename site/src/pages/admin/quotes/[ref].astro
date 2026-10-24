@@ -1,0 +1,478 @@
+---
+import Admin from '@/layouts/Admin.astro';
+import { formObject, setFlash, str, takeFlash } from '@/lib/admin/web';
+import {
+  MANUAL_METHODS,
+  PaymentError,
+  addNote,
+  cancelQuote,
+  editQuote,
+  getQuote,
+  getQuoteStatus,
+  needsAttention,
+  payUrl,
+  recordManualPayment,
+  refundPayment,
+  refundable,
+  reopenQuote,
+  resolveRefundManually,
+  syncPesapalRefunds,
+} from '@/lib/payments/service';
+import { getPaymentDeps, getRuntime } from '@/lib/server/payments';
+import { emailPayLink, resendReceipt, whatsappShareUrl } from '@/lib/server/admin-actions';
+import { PAYMENT_STATUS_LABEL, PROVIDER_LABEL, REFUND_STATUS_LABEL, STATUS_LABEL, dateTime } from '@/lib/admin/labels';
+import { displayPhone } from '@/lib/payments/phone';
+import { formatKes } from '@/lib/enquiry';
+import { createBalanceQuote, prettyDate } from '@/lib/packages/booking';
+import { travellersLabel } from '@/lib/packages/pricing';
+
+export const prerender = false;
+
+const deps = getPaymentDeps();
+const rt = getRuntime();
+const by = Astro.locals.admin!;
+const ref = (Astro.params['ref'] ?? '').toUpperCase();
+const here = `/admin/quotes/${ref}/`;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = str(form, 'action');
+  try {
+    const current = await getQuote(deps, ref);
+    let message = 'Saved.';
+    switch (action) {
+      case 'email_link':
+        await emailPayLink(current, by);
+        message = `Pay link emailed to ${current.email}.`;
+        break;
+      case 'edit':
+        await editQuote(deps, ref, formObject(form, ['guestName', 'email', 'phone', 'description', 'amountKes']), by);
+        message = 'Quote updated. The pay link stays the same.';
+        break;
+      case 'cancel':
+        await cancelQuote(deps, ref, by, str(form, 'reason'));
+        message = 'Quote cancelled. The pay link no longer works.';
+        break;
+      case 'reopen':
+        await reopenQuote(deps, ref, by);
+        message = 'Quote reopened. The pay link works again.';
+        break;
+      case 'manual_paid':
+        await recordManualPayment(deps, ref, formObject(form, ['method', 'reference', 'note']), by);
+        message = 'Payment recorded. The booking is now paid.';
+        break;
+      case 'refund': {
+        const r = await refundPayment(deps, ref, formObject(form, ['paymentId', 'amountKes', 'reason', 'mode', 'reference']), by);
+        message =
+          r.status === 'completed'
+            ? `Refund of ${formatKes(r.amountKes)} recorded.`
+            : r.via === 'pesapal'
+              ? `Refund sent to Pesapal. Approve it in your Pesapal dashboard, then use “Check refund status”.`
+              : `Reversal requested. Safaricom usually confirms within a few minutes; this page will show the result.`;
+        break;
+      }
+      case 'check_refunds': {
+        const n = await syncPesapalRefunds(deps, ref);
+        message = n ? `${n} refund${n === 1 ? '' : 's'} confirmed by Pesapal.` : 'Pesapal hasn’t completed the refund yet. It may still need approving in your Pesapal dashboard.';
+        break;
+      }
+      case 'resolve_refund':
+        await resolveRefundManually(deps, ref, str(form, 'refundId'), str(form, 'outcome') === 'done', by, str(form, 'note'));
+        message = 'Refund updated.';
+        break;
+      case 'resend_receipt':
+        await resendReceipt(current, by);
+        message = `Receipt emailed to ${current.email}.`;
+        break;
+      case 'check_status': {
+        const v = await getQuoteStatus(deps, ref);
+        message = `Checked with the payment provider: ${v.message}`;
+        break;
+      }
+      case 'note':
+        await addNote(deps, ref, str(form, 'note'), by);
+        message = 'Note added.';
+        break;
+      case 'balance': {
+        const child = await createBalanceQuote(deps, ref, by);
+        let note = `Balance quote ${child.ref} created for ${formatKes(child.amountKes)}.`;
+        if (str(form, 'sendEmail') === 'on' && child.email && rt.mailer) {
+          try {
+            await emailPayLink(child, by);
+            note += ` Pay link emailed to ${child.email}.`;
+          } catch (err) {
+            note += ` The email didn’t send (${(err as Error).message}). Copy the link below instead.`;
+          }
+        } else {
+          note += ' Copy the pay link below and send it to your guest.';
+        }
+        setFlash(Astro.cookies, 'ok', note);
+        return Astro.redirect(`/admin/quotes/${child.ref}/`);
+      }
+      default:
+        throw new PaymentError(400, 'unknown', 'Unknown action.');
+    }
+    setFlash(Astro.cookies, 'ok', message);
+  } catch (err) {
+    if (!(err instanceof PaymentError)) throw err;
+    setFlash(Astro.cookies, 'error', err.message);
+  }
+  return Astro.redirect(here);
+}
+
+let quote;
+try {
+  quote = await getQuote(deps, ref);
+} catch (err) {
+  if (!(err instanceof PaymentError)) throw err;
+  Astro.response.status = 404;
+}
+const flash = takeFlash(Astro.cookies);
+const link = quote ? payUrl(deps.config, quote.ref) : '';
+const paidPayments = quote ? quote.payments.filter((p) => p.status === 'paid' && refundable(quote, p.id) > 0) : [];
+const pendingPayment = quote?.payments.some((p) => p.status === 'pending');
+const waitingPesapalRefund = quote?.refunds?.some((r) => r.via === 'pesapal' && r.status === 'requested');
+const reversalReady = Boolean(deps.config.mpesa?.reversal);
+const history = quote ? [...(quote.history ?? [])].reverse() : [];
+const booking = quote?.booking;
+const PLAN_LABEL = { deposit: 'Deposit', full: 'Paid in full', balance: 'Balance' } as const;
+---
+
+<Admin title={quote ? `${quote.ref} · ${quote.guestName}` : 'Quote not found'} active="quotes" flash={flash}>
+  {
+    !quote ? (
+      <div class="panel">
+        <h1>Quote not found</h1>
+        <p>There’s no quote {ref}. <a class="link" href="/admin/">Back to all quotes</a></p>
+      </div>
+    ) : (
+      <>
+        <div class="admin-head">
+          <div>
+            <p style="margin:0"><a href="/admin/">← All quotes</a></p>
+            <h1>
+              {quote.guestName} <span class="badge" style="vertical-align:middle">{quote.ref}</span>
+            </h1>
+            <p>
+              <span class:list={['badge', `badge--${quote.status}`]} data-quote-status>{STATUS_LABEL[quote.status]}</span>
+              {needsAttention(quote) && <span class="badge badge--attention">Needs checking</span>} {formatKes(quote.amountKes)} · {quote.description}
+            </p>
+          </div>
+        </div>
+
+        <div class="panel-grid">
+          <div>
+            <section class="panel" aria-labelledby="link-h">
+              <h2 id="link-h">Pay link</h2>
+              {quote.status === 'awaiting_payment' ? (
+                <>
+                  <div class="copy-row">
+                    <input id="pay-link" readonly value={link} aria-label="Pay link" />
+                    <button class="button button--small" type="button" data-copy="#pay-link">Copy link</button>
+                  </div>
+                  <div class="actions" style="margin-top:12px">
+                    <a class="button button--small button--whatsapp" href={whatsappShareUrl(quote, link)} target="_blank" rel="noopener noreferrer">
+                      Send on WhatsApp{quote.phone ? '' : '…'}
+                    </a>
+                    <form method="post">
+                      <input type="hidden" name="action" value="email_link" />
+                      <button class="button button--small button--ghost" type="submit" disabled={!quote.email || !rt.mailer}>
+                        Email link{quote.email ? ` to ${quote.email}` : ''}
+                      </button>
+                    </form>
+                    <a class="button button--small button--ghost" href={link} target="_blank" rel="noopener">Open pay page</a>
+                  </div>
+                  {!quote.email && <p class="hint">Add the guest’s email (Edit details) to email the link and their receipt.</p>}
+                  {quote.email && !rt.mailer && <p class="hint">To email links, set up email in <a href="/admin/settings/#email">Settings</a>.</p>}
+                </>
+              ) : (
+                <p style="margin:0">
+                  {quote.status === 'paid' && 'Paid. The link now shows the guest a thank-you message.'}
+                  {quote.status === 'cancelled' && 'Cancelled. The link tells the guest to contact you.'}
+                  {quote.status === 'refunded' && 'Refunded. The link tells the guest the booking was refunded.'}
+                </p>
+              )}
+            </section>
+
+            <section class="panel" aria-labelledby="pay-h">
+              <h2 id="pay-h">Payments</h2>
+              {quote.payments.length === 0 ? (
+                <p style="margin:0" class="hint">No payment attempts yet.</p>
+              ) : (
+                <div class="table-wrap" style="border:0">
+                  <table class="admin-table">
+                    <thead>
+                      <tr><th scope="col">When</th><th scope="col">Method</th><th scope="col" class="num">Amount</th><th scope="col">Status</th><th scope="col">Receipt</th></tr>
+                    </thead>
+                    <tbody>
+                      {quote.payments.map((p) => (
+                        <tr>
+                          <td>{dateTime(p.createdAt)}</td>
+                          <td>
+                            {PROVIDER_LABEL[p.provider]}
+                            {p.method && p.provider !== 'mpesa' && <small>{p.method}</small>}
+                            {p.phone && <small>{displayPhone(p.phone)}</small>}
+                          </td>
+                          <td class="num">{formatKes(p.amountKes)}</td>
+                          <td>
+                            <span class:list={['badge', `badge--${p.status}`]}>{PAYMENT_STATUS_LABEL[p.status]}</span>
+                            {p.failureReason && <small>{p.failureReason}</small>}
+                            {p.flag && <small style="color:#6e2a12;font-weight:600">{p.flag}</small>}
+                            {p.note && <small>{p.note}</small>}
+                          </td>
+                          <td>{p.receipt ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {pendingPayment && (
+                <form method="post" style="margin-top:12px">
+                  <input type="hidden" name="action" value="check_status" />
+                  <button class="button button--small button--ghost" type="submit">Check with the provider now</button>
+                </form>
+              )}
+            </section>
+
+            {(quote.refunds?.length ?? 0) > 0 && (
+              <section class="panel" aria-labelledby="ref-h">
+                <h2 id="ref-h">Refunds</h2>
+                <div class="table-wrap" style="border:0">
+                  <table class="admin-table">
+                    <thead>
+                      <tr><th scope="col">When</th><th scope="col">How</th><th scope="col" class="num">Amount</th><th scope="col">Status</th><th scope="col">By</th></tr>
+                    </thead>
+                    <tbody>
+                      {quote.refunds!.map((r) => (
+                        <tr>
+                          <td>{dateTime(r.createdAt)}</td>
+                          <td>
+                            {r.via === 'manual' ? 'Paid back another way' : r.via === 'mpesa' ? 'M-Pesa reversal' : 'Pesapal refund'}
+                            <small>{r.reason}</small>
+                            {r.reference && <small>Ref: {r.reference}</small>}
+                          </td>
+                          <td class="num">{formatKes(r.amountKes)}</td>
+                          <td>
+                            <span class:list={['badge', `badge--${r.status}`]}>{REFUND_STATUS_LABEL[r.status]}</span>
+                            {r.failureReason && <small>{r.failureReason}</small>}
+                          </td>
+                          <td>{r.by}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {quote.refunds!.some((r) => r.status === 'requested') && (
+                  <details class="action" style="margin-top:12px">
+                    <summary>Refund stuck? Update it by hand</summary>
+                    <p class="hint">Check the M-Pesa org portal or Pesapal dashboard first, then record what happened.</p>
+                    {quote.refunds!.filter((r) => r.status === 'requested').map((r) => (
+                      <form method="post" class="admin-form" style="margin-bottom:12px">
+                        <input type="hidden" name="action" value="resolve_refund" />
+                        <input type="hidden" name="refundId" value={r.id} />
+                        <p style="margin:0">{formatKes(r.amountKes)} via {r.via === 'mpesa' ? 'M-Pesa' : 'Pesapal'}</p>
+                        <label class="field">Note <input name="note" maxlength="200" /></label>
+                        <div class="actions">
+                          <button class="button button--small" type="submit" name="outcome" value="done">Mark as refunded</button>
+                          <button class="button button--small button--ghost" type="submit" name="outcome" value="failed">Mark as failed</button>
+                        </div>
+                      </form>
+                    ))}
+                  </details>
+                )}
+              </section>
+            )}
+
+            <section class="panel" aria-labelledby="hist-h">
+              <h2 id="hist-h">History</h2>
+              <form method="post" class="copy-row" style="margin-bottom:14px">
+                <input type="hidden" name="action" value="note" />
+                <input name="note" placeholder="Add a note, e.g. ‘Called Jane, paying Friday’" aria-label="Note" maxlength="500" required />
+                <button class="button button--small button--ghost" type="submit">Add note</button>
+              </form>
+              <ol class="timeline">
+                {history.map((h) => (
+                  <li>
+                    <time datetime={h.at}>{dateTime(h.at)} · {h.by}</time>
+                    {h.text}
+                  </li>
+                ))}
+              </ol>
+            </section>
+          </div>
+
+          <div>
+            <section class="panel" aria-labelledby="det-h">
+              <h2 id="det-h">Details</h2>
+              <dl class="kv">
+                <dt>Guest</dt><dd>{quote.guestName}</dd>
+                <dt>Email</dt><dd>{quote.email ?? '—'}</dd>
+                <dt>Phone</dt><dd>{quote.phone ? displayPhone(quote.phone) : '—'}</dd>
+                <dt>Trip</dt><dd>{quote.description}</dd>
+                <dt>Amount</dt><dd>{formatKes(quote.amountKes)}</dd>
+                <dt>Created</dt><dd>{dateTime(quote.createdAt)}</dd>
+                {quote.paidAt && <><dt>Paid</dt><dd>{dateTime(quote.paidAt)}</dd></>}
+              </dl>
+              {quote.status === 'awaiting_payment' && !pendingPayment && (
+                <details class="action" style="margin-top:14px">
+                  <summary>Edit details</summary>
+                  <form method="post" class="admin-form">
+                    <input type="hidden" name="action" value="edit" />
+                    <label class="field">Guest name<input name="guestName" value={quote.guestName} required maxlength="80" /></label>
+                    <label class="field">Email<input name="email" type="email" value={quote.email ?? ''} /></label>
+                    <label class="field">Phone<input name="phone" type="tel" value={quote.phone ? displayPhone(quote.phone) : ''} /></label>
+                    <label class="field">Trip description<input name="description" value={quote.description} required maxlength="200" /></label>
+                    <label class="field">Amount (KES)<input name="amountKes" value={String(quote.amountKes)} required inputmode="numeric" /></label>
+                    <button class="button button--small" type="submit">Save changes</button>
+                  </form>
+                </details>
+              )}
+            </section>
+
+            {booking && (
+              <section class="panel" aria-labelledby="book-h" data-booking-panel>
+                <h2 id="book-h">Online booking</h2>
+                <dl class="kv">
+                  <dt>Journey</dt><dd><a href={`/admin/packages/${booking.packageId}/`}>{booking.packageName}</a></dd>
+                  <dt>Starts</dt><dd>{prettyDate(booking.travelDate)}</dd>
+                  <dt>Travellers</dt><dd>{travellersLabel(booking.adults, booking.children)}</dd>
+                  <dt>Trip total</dt><dd>{formatKes(booking.totalKes)}</dd>
+                  <dt>This quote</dt><dd>{PLAN_LABEL[booking.plan]}{booking.plan === 'deposit' && ` (${booking.depositPercent}%)`}</dd>
+                  {booking.plan === 'deposit' && <><dt>Balance due</dt><dd>{formatKes(booking.balanceKes)}</dd></>}
+                  {booking.parentRef && <><dt>Deposit quote</dt><dd><a href={`/admin/quotes/${booking.parentRef}/`}>{booking.parentRef}</a></dd></>}
+                  {booking.balanceRef && <><dt>Balance quote</dt><dd><a href={`/admin/quotes/${booking.balanceRef}/`}>{booking.balanceRef}</a></dd></>}
+                </dl>
+                {booking.plan === 'deposit' && !booking.balanceRef && booking.balanceKes > 0 && (
+                  quote.status === 'paid' ? (
+                    <form method="post" class="admin-form" style="margin-top:14px">
+                      <input type="hidden" name="action" value="balance" />
+                      <label style="display:flex;gap:10px;align-items:center;font-weight:500">
+                        <input type="checkbox" name="sendEmail" checked={Boolean(quote.email && rt.mailer)} disabled={!quote.email || !rt.mailer} />
+                        Email the link to the guest now
+                      </label>
+                      <button class="button button--small" type="submit">Create balance pay link ({formatKes(booking.balanceKes)})</button>
+                    </form>
+                  ) : (
+                    <p class="hint" style="margin:14px 0 0">Once the deposit is paid you can create a pay link for the balance here.</p>
+                  )
+                )}
+              </section>
+            )}
+
+            <section class="panel" aria-labelledby="act-h">
+              <h2 id="act-h">Actions</h2>
+
+              {quote.status === 'awaiting_payment' && (
+                <>
+                  <details class="action">
+                    <summary>Record a payment made another way</summary>
+                    <p class="hint">For cash at the office, a bank transfer, or M-Pesa paid straight to your till. The booking becomes paid and the guest gets a receipt.</p>
+                    <form method="post" class="admin-form">
+                      <input type="hidden" name="action" value="manual_paid" />
+                      <label class="field">How was it paid?
+                        <select name="method" required>
+                          <option value="">Choose…</option>
+                          {MANUAL_METHODS.map((m) => <option>{m}</option>)}
+                        </select>
+                      </label>
+                      <label class="field">Reference <span class="hint">Bank or M-Pesa reference, receipt number…</span><input name="reference" maxlength="80" /></label>
+                      <label class="field">Note<input name="note" maxlength="300" /></label>
+                      <button class="button button--small" type="submit" data-confirm={`Record ${formatKes(quote.amountKes)} as paid?`}>Record payment of {formatKes(quote.amountKes)}</button>
+                    </form>
+                  </details>
+                  <details class="action">
+                    <summary>Cancel this quote</summary>
+                    <form method="post" class="admin-form">
+                      <input type="hidden" name="action" value="cancel" />
+                      <label class="field">Reason <span class="hint">Optional, for your records.</span><input name="reason" maxlength="200" /></label>
+                      <button class="button button--small button--danger" type="submit" data-confirm="Cancel this quote? The pay link will stop working.">Cancel quote</button>
+                    </form>
+                  </details>
+                </>
+              )}
+
+              {quote.status === 'cancelled' && (
+                <form method="post">
+                  <input type="hidden" name="action" value="reopen" />
+                  <button class="button button--small" type="submit">Reopen quote</button>
+                </form>
+              )}
+
+              {paidPayments.length > 0 && (
+                <details class="action">
+                  <summary>Refund</summary>
+                  <form method="post" class="admin-form" data-refund-form>
+                    <input type="hidden" name="action" value="refund" />
+                    <label class="field">Payment
+                      <select name="paymentId" data-refund-payment required>
+                        {paidPayments.map((p) => (
+                          <option value={p.id} data-left={refundable(quote, p.id)} data-provider={p.provider}>
+                            {PROVIDER_LABEL[p.provider]} · {formatKes(p.amountKes)}{p.receipt ? ` · ${p.receipt}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label class="field">Amount to refund (KES)
+                      <input name="amountKes" required inputmode="numeric" value={String(refundable(quote, paidPayments[0]!.id))} data-refund-amount />
+                      <span class="hint" data-refund-hint></span>
+                    </label>
+                    <label class="field">Reason<input name="reason" required maxlength="200" placeholder="e.g. Trip cancelled by guest" /></label>
+                    <fieldset style="border:0;padding:0;margin:0;display:grid;gap:8px">
+                      <legend style="font-weight:600;margin-bottom:6px">How</legend>
+                      <label style="display:flex;gap:8px;align-items:flex-start"><input type="radio" name="mode" value="provider" checked data-mode-provider /> <span>Send it back through M-Pesa / Pesapal automatically</span></label>
+                      <label style="display:flex;gap:8px;align-items:flex-start"><input type="radio" name="mode" value="manual" /> <span>I’ve already paid it back another way (just record it)</span></label>
+                    </fieldset>
+                    <label class="field">Refund reference <span class="hint">Only for refunds you made another way.</span><input name="reference" maxlength="80" /></label>
+                    <button class="button button--small button--danger" type="submit" data-confirm="Send this refund? This can’t be undone.">Refund</button>
+                    {!reversalReady && <p class="hint" style="margin:0">Automatic M-Pesa refunds need the initiator details in <a href="/admin/settings/#mpesa">Settings → M-Pesa</a>.</p>}
+                  </form>
+                </details>
+              )}
+
+              {waitingPesapalRefund && (
+                <form method="post" style="margin-top:12px">
+                  <input type="hidden" name="action" value="check_refunds" />
+                  <button class="button button--small button--ghost" type="submit">Check refund status with Pesapal</button>
+                </form>
+              )}
+
+              {(quote.status === 'paid' || quote.status === 'refunded') && (
+                <form method="post" style="margin-top:12px">
+                  <input type="hidden" name="action" value="resend_receipt" />
+                  <button class="button button--small button--ghost" type="submit" disabled={!quote.email || !rt.mailer}>Email the receipt again</button>
+                </form>
+              )}
+
+              {quote.status === 'refunded' && <p class="hint" style="margin:0">Fully refunded. Nothing else to do.</p>}
+            </section>
+          </div>
+        </div>
+      </>
+    )
+  }
+</Admin>
+
+<script>
+  // Keep the refund amount and hint in step with the chosen payment.
+  const form = document.querySelector<HTMLFormElement>('[data-refund-form]');
+  if (form) {
+    const select = form.querySelector<HTMLSelectElement>('[data-refund-payment]')!;
+    const amount = form.querySelector<HTMLInputElement>('[data-refund-amount]')!;
+    const hint = form.querySelector<HTMLElement>('[data-refund-hint]')!;
+    const update = () => {
+      const opt = select.selectedOptions[0];
+      if (!opt) return;
+      const left = Number(opt.dataset['left']);
+      amount.value = String(left);
+      hint.textContent =
+        opt.dataset['provider'] === 'mpesa'
+          ? `M-Pesa reversals return the full ${left.toLocaleString('en-KE')}. For a part refund, pay it back another way and record it.`
+          : opt.dataset['provider'] === 'pesapal'
+            ? `Up to ${left.toLocaleString('en-KE')}. Card payments can be part-refunded once; mobile money only in full.`
+            : `Up to ${left.toLocaleString('en-KE')}.`;
+    };
+    select.addEventListener('change', update);
+    update();
+  }
+</script>

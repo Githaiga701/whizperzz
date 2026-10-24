@@ -1,0 +1,238 @@
+---
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import { getQuoteStatus, PaymentError, type QuoteView } from '@/lib/payments/service';
+import { getPaymentDeps } from '@/lib/server/payments';
+import { formatKes, whatsappUrl } from '@/lib/enquiry';
+import { prettyDate } from '@/lib/packages/booking';
+import { travellersLabel } from '@/lib/packages/pricing';
+
+export const prerender = false;
+
+const ref = (Astro.params['ref'] ?? '').toUpperCase();
+const returningFromCard = Astro.url.searchParams.get('return') === 'card';
+
+let view: QuoteView | undefined;
+try {
+  view = await getQuoteStatus(getPaymentDeps(), ref, { refresh: returningFromCard });
+} catch (err) {
+  if (!(err instanceof PaymentError)) throw err;
+  Astro.response.status = err.status;
+}
+
+const help = whatsappUrl(view ? `Hello Whizperz, I have a question about paying for booking ${view.ref}.` : 'Hello Whizperz, I have a question about paying for my trip.');
+const done = view?.status === 'paid';
+const anyMethod = view ? view.methods.mpesa || view.methods.card : false;
+/** Cancelled or refunded: nothing to pay. */
+const closed = view?.status === 'cancelled' || view?.status === 'refunded';
+const b = view?.booking;
+const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b.plan === 'balance' ? 'Balance' : 'Paid in full') : '';
+---
+
+<Base title={view ? `Pay for ${view.ref}` : 'Payment link not found'} noindex contactDock={false}>
+  <PageHero
+    title={done ? 'All paid. Thank you!' : closed ? 'Nothing to pay' : 'Pay for your trip'}
+    kicker="Secure payment"
+    intro={view ? `Booking ${view.ref}` : undefined}
+  />
+
+  <section class="section" style="padding-top:0">
+    <div class="wrap contact-grid">
+      {
+        !view ? (
+          <div>
+            <p class="lede">We couldn’t find that payment link. Check it was copied in full, or ask us to send it again.</p>
+            {help && <a class="button button--whatsapp" href={help} target="_blank" rel="noopener noreferrer">Ask us on WhatsApp</a>}
+          </div>
+        ) : (
+          <>
+            <div class="pay-summary">
+              <p class="kicker">For {view.firstName}</p>
+              <p class="pay-desc">{view.description}</p>
+              <p class="pay-amount" data-amount>{formatKes(view.amountKes)}</p>
+              <dl class="facts">
+                <div><dt>Reference</dt><dd>{view.ref}</dd></div>
+                <div><dt>Currency</dt><dd>Kenyan shillings</dd></div>
+                {b && (
+                  <>
+                    <div><dt>Journey</dt><dd>{b.packageName}</dd></div>
+                    <div><dt>Starts</dt><dd>{prettyDate(b.travelDate)}</dd></div>
+                    <div><dt>Travellers</dt><dd>{travellersLabel(b.adults, b.children)}</dd></div>
+                    <div><dt>Trip total</dt><dd>{formatKes(b.totalKes)}</dd></div>
+                    <div class="full" data-plan><dt>This payment</dt><dd>{planLabel}{b.plan === 'deposit' && b.balanceKes > 0 && <>. We’ll send a link for the balance of {formatKes(b.balanceKes)} before you travel.</>}</dd></div>
+                  </>
+                )}
+              </dl>
+              <p class="form-note">We will never ask for your M-Pesa PIN or card details by phone, WhatsApp or email.</p>
+            </div>
+
+            <div class="enquiry-form pay-panel" data-pay data-ref={view.ref} data-initial={view.status}>
+              <div class="pay-status" data-pay-status role="status" aria-live="polite" data-state={view.status}>
+                {view.status === 'paid' && (
+                  <>
+                    <strong>Payment received.</strong> {view.message}
+                    {view.receipt && <span class="pay-receipt">Receipt: {view.receipt}</span>}
+                  </>
+                )}
+                {(view.status === 'pending' || view.status === 'failed' || closed) && view.message}
+              </div>
+
+              {!done && !closed && anyMethod && (
+                <>
+                  {view.methods.mpesa && (
+                    <form class="pay-method" data-pay-mpesa>
+                      <h2>Pay with M-Pesa</h2>
+                      <label class="field">
+                        Safaricom number
+                        <input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" required />
+                      </label>
+                      <button class="button button--whatsapp" type="submit">Send M-Pesa prompt</button>
+                      <p class="form-note">You’ll get a prompt on your phone to enter your PIN. Nothing is charged until you do.</p>
+                    </form>
+                  )}
+                  {view.methods.card && (
+                    <form class="pay-method" data-pay-card>
+                      <h2>Pay by card</h2>
+                      <label class="field">
+                        Email for your receipt
+                        <input name="email" type="email" autocomplete="email" required />
+                      </label>
+                      <button class="button" type="submit">Continue to card payment</button>
+                      <p class="form-note">Visa, Mastercard and mobile money, through Pesapal’s secure page.</p>
+                    </form>
+                  )}
+                </>
+              )}
+
+              {!done && !anyMethod && !closed && (
+                <p>Online payment isn’t switched on yet. Message us and we’ll send payment details for this booking.</p>
+              )}
+
+              {!done && help && <p class="form-note">Stuck? <a class="link" href={help} target="_blank" rel="noopener noreferrer">Ask us on WhatsApp</a></p>}
+            </div>
+          </>
+        )
+      }
+    </div>
+  </section>
+</Base>
+
+<style>
+  .pay-desc { font-size: var(--step-1); margin-bottom: 8px; }
+  .pay-amount { font-family: var(--display); font-size: var(--step-4); line-height: 1; margin: 12px 0 28px; }
+  .pay-panel { gap: 24px; }
+  .pay-method { display: grid; gap: 12px; padding-top: 20px; border-top: 1px solid var(--line); }
+  .pay-method:first-of-type { border-top: 0; padding-top: 0; }
+  .pay-method h2 { font-size: var(--step-2); margin: 0; }
+  .pay-method .button { justify-self: start; }
+  .pay-status:empty { display: none; }
+  .pay-status { padding: 14px 16px; border-radius: var(--radius); background: rgba(200, 144, 47, 0.16); font-weight: 500; }
+  .pay-status[data-state='paid'] { background: rgba(86, 97, 58, 0.18); }
+  .pay-status[data-state='failed'], .pay-status[data-state='error'] { background: rgba(155, 61, 28, 0.12); color: #6e2a12; }
+  .pay-receipt { display: block; margin-top: 6px; font-weight: 600; }
+  [aria-busy='true'] .button { opacity: 0.6; pointer-events: none; }
+</style>
+
+<script>
+  type Status = 'awaiting_payment' | 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'error';
+  interface StatusReply {
+    status: Status;
+    message: string;
+    receipt: string | null;
+  }
+
+  const panel = document.querySelector<HTMLElement>('[data-pay]');
+  if (panel) {
+    const ref = panel.dataset['ref']!;
+    const statusEl = panel.querySelector<HTMLElement>('[data-pay-status]')!;
+    const forms = [...panel.querySelectorAll<HTMLFormElement>('form')];
+    let pollTimer: number | undefined;
+    let pollUntil = 0;
+
+    const show = (state: Status, message: string, receipt?: string | null) => {
+      statusEl.dataset['state'] = state;
+      statusEl.textContent = message;
+      if (receipt) {
+        const r = document.createElement('span');
+        r.className = 'pay-receipt';
+        r.textContent = `Receipt: ${receipt}`;
+        statusEl.append(r);
+      }
+    };
+    const busy = (on: boolean) => forms.forEach((f) => f.setAttribute('aria-busy', String(on)));
+
+    async function post(path: string, body: Record<string, string>): Promise<{ ok: boolean; data: Record<string, string> }> {
+      try {
+        const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        return { ok: res.ok, data: await res.json() };
+      } catch {
+        return { ok: false, data: { message: 'Couldn’t connect. Check your internet connection and try again.' } };
+      }
+    }
+
+    async function poll() {
+      window.clearTimeout(pollTimer);
+      let reply: StatusReply | undefined;
+      try {
+        const res = await fetch(`/api/pay/status?ref=${encodeURIComponent(ref)}`, { cache: 'no-store' });
+        if (res.ok) reply = await res.json();
+      } catch {
+        /* try again below */
+      }
+      if (reply?.status === 'paid') {
+        show('paid', reply.message, reply.receipt);
+        forms.forEach((f) => (f.hidden = true));
+        document.querySelector('h1')!.textContent = 'All paid. Thank you!';
+        return;
+      }
+      if (reply && reply.status !== 'pending') {
+        show(reply.status, reply.message);
+        busy(false);
+        return;
+      }
+      if (Date.now() > pollUntil) {
+        show('error', 'Still waiting for confirmation. If you’ve paid, there’s no need to pay again. Refresh this page in a minute, or message us.');
+        busy(false);
+        return;
+      }
+      pollTimer = window.setTimeout(poll, 3000);
+    }
+
+    function startPolling(minutes = 3) {
+      pollUntil = Date.now() + minutes * 60_000;
+      busy(true);
+      pollTimer = window.setTimeout(poll, 2500);
+    }
+
+    panel.querySelector<HTMLFormElement>('[data-pay-mpesa]')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const phone = String(new FormData(e.currentTarget as HTMLFormElement).get('phone') ?? '');
+      busy(true);
+      show('pending', 'Sending the payment prompt…');
+      const { ok, data } = await post('/api/pay/mpesa', { ref, phone });
+      if (!ok) {
+        show('failed', data['message'] ?? 'Something went wrong. Please try again.');
+        busy(false);
+        return;
+      }
+      show('pending', data['message'] ?? 'Check your phone.');
+      startPolling();
+    });
+
+    panel.querySelector<HTMLFormElement>('[data-pay-card]')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = String(new FormData(e.currentTarget as HTMLFormElement).get('email') ?? '');
+      busy(true);
+      show('pending', 'Opening the secure card payment page…');
+      const { ok, data } = await post('/api/pay/card', { ref, email });
+      if (!ok || !data['redirectUrl']) {
+        show('failed', data['message'] ?? 'Something went wrong. Please try again.');
+        busy(false);
+        return;
+      }
+      window.location.assign(data['redirectUrl']);
+    });
+
+    if (panel.dataset['initial'] === 'pending') startPolling(2);
+  }
+</script>

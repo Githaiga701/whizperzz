@@ -1,0 +1,27 @@
+---
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import { faqs } from '@/data/faq';
+---
+
+<Base title="FAQs" description="Answers to common questions about planning a Kenya safari or coast trip with Whizperz.">
+  <PageHero title="Questions, answered." kicker="Good to know" intro="Planning should feel exciting, not confusing. Here’s what people usually ask us first." />
+  <section class="section" style="padding-top:0">
+    <div class="wrap faq">
+      <div>
+        <p class="lede">Have a question that isn’t here? Ask us on WhatsApp. We’re quick.</p>
+        <a class="button" href="/contact/">Ask a question</a>
+      </div>
+      <div class="faq-list">
+        {
+          faqs.map((f) => (
+            <details>
+              <summary>{f.q}</summary>
+              <p>{f.a}</p>
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+</Base>

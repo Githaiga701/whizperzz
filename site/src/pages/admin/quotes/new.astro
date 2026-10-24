@@ -1,0 +1,107 @@
+---
+import Admin from '@/layouts/Admin.astro';
+import { formObject, setFlash, str } from '@/lib/admin/web';
+import { createQuote, PaymentError } from '@/lib/payments/service';
+import { getPaymentDeps, getRuntime } from '@/lib/server/payments';
+import { emailPayLink } from '@/lib/server/admin-actions';
+import { routeLabel } from '@/lib/packages/store';
+import { destinationNames, getPackageStore } from '@/lib/server/packages';
+
+export const prerender = false;
+
+const rt = getRuntime();
+const by = Astro.locals.admin!;
+const journeys = await getPackageStore().list();
+const names = await destinationNames();
+const presets = journeys.map((j) => ({ id: j.id, label: `${j.name} (${j.days} days, ${routeLabel(j.route, names)})`, text: `${j.name}, ${j.days} days` }));
+
+const FIELDS = ['guestName', 'email', 'phone', 'description', 'amountKes'] as const;
+let values: Record<string, string> = Object.fromEntries(FIELDS.map((f) => [f, '']));
+let error = '';
+let sendEmail = Boolean(rt.mailer);
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  values = formObject(form, FIELDS);
+  sendEmail = str(form, 'sendEmail') === 'on';
+  try {
+    const quote = await createQuote(getPaymentDeps(), values, by);
+    let note = `Quote ${quote.ref} created.`;
+    if (sendEmail && quote.email) {
+      try {
+        await emailPayLink(quote, by);
+        note += ` Pay link emailed to ${quote.email}.`;
+      } catch (err) {
+        note += ` The email didn’t send (${(err as Error).message}). Copy the link below instead.`;
+      }
+    } else {
+      note += ' Copy the pay link below and send it to your guest.';
+    }
+    setFlash(Astro.cookies, 'ok', note);
+    return Astro.redirect(`/admin/quotes/${quote.ref}/`);
+  } catch (err) {
+    if (!(err instanceof PaymentError)) throw err;
+    error = err.message;
+  }
+}
+---
+
+<Admin title="New quote" active="new" flash={error ? { kind: 'error', text: error } : undefined}>
+  <div class="admin-head">
+    <div>
+      <h1>New quote</h1>
+      <p>Set the price you agreed with the guest. They’ll get a private link to pay exactly this amount.</p>
+    </div>
+  </div>
+
+  <div class="panel-grid">
+    <form method="post" class="panel admin-form">
+      <div class="two">
+        <label class="field">Guest name<input name="guestName" value={values['guestName']} required maxlength="80" autocomplete="off" /></label>
+        <label class="field">Amount (KES)<input name="amountKes" value={values['amountKes']} required inputmode="numeric" placeholder="85000" pattern="[0-9, ]+" /></label>
+      </div>
+      <div class="two">
+        <label class="field">Guest email <span class="hint">Optional. Needed for emailed links and receipts.</span><input name="email" type="email" value={values['email']} autocomplete="off" /></label>
+        <label class="field">Guest phone <span class="hint">Optional. Used for the WhatsApp button.</span><input name="phone" type="tel" value={values['phone']} placeholder="0712 345 678" autocomplete="off" /></label>
+      </div>
+      <label class="field">
+        Start from a journey <span class="hint">Optional. Fills in the trip description.</span>
+        <select data-preset>
+          <option value="">Choose a journey…</option>
+          {presets.map((p) => <option value={p.text}>{p.label}</option>)}
+        </select>
+      </label>
+      <label class="field">
+        Trip description <span class="hint">What the guest sees on the pay page, e.g. “Wild to blue, 2 adults, 12 to 18 January”.</span>
+        <input name="description" value={values['description']} required maxlength="200" data-description />
+      </label>
+      <label style="display:flex;gap:10px;align-items:center;font-weight:500">
+        <input type="checkbox" name="sendEmail" checked={sendEmail} disabled={!rt.mailer} />
+        Email the pay link to the guest now
+      </label>
+      {!rt.mailer && <p class="hint" style="margin:0">To email links and receipts, set up email in <a href="/admin/settings/#email">Settings</a>.</p>}
+      <button class="button" type="submit">Create quote</button>
+    </form>
+
+    <div class="panel">
+      <h2>What happens next</h2>
+      <ol style="margin:0;padding-left:20px;display:grid;gap:8px">
+        <li>You get a pay link like <span class="code">/pay/WZ-7K3P9Q/</span>.</li>
+        <li>Send it by email or WhatsApp (buttons on the next page).</li>
+        <li>The guest pays with M-Pesa or card. The amount can’t be changed.</li>
+        <li>The quote turns <span class="badge badge--paid">Paid</span>, the guest gets a receipt, and you get an alert.</li>
+      </ol>
+    </div>
+  </div>
+</Admin>
+
+<script>
+  const preset = document.querySelector<HTMLSelectElement>('[data-preset]');
+  const description = document.querySelector<HTMLInputElement>('[data-description]');
+  preset?.addEventListener('change', () => {
+    if (preset.value && description) {
+      description.value = preset.value + ', ';
+      description.focus();
+    }
+  });
+</script>

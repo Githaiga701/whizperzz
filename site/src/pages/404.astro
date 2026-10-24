@@ -1,0 +1,24 @@
+---
+import Base from '@/layouts/Base.astro';
+import Whisper from '@/components/Whisper.astro';
+
+// Rendered on the server so journey and destination pages can show it for things that don't exist.
+export const prerender = false;
+Astro.response.status = 404;
+---
+
+<Base title="Page not found">
+  <section class="section">
+    <div class="wrap detail">
+      <div>
+        <h1>Wrong turn.</h1>
+        <p class="lede">That page doesn’t exist, or it has moved. Let’s get you back on the road.</p>
+        <div class="button-row">
+          <a class="button" href="/">Go to the home page</a>
+          <a class="button button--ghost" href="/destinations/">See destinations</a>
+        </div>
+      </div>
+      <Whisper text="Happens to the best of us. Even the guides take the long way sometimes." from="From the road" tilt={2} />
+    </div>
+  </section>
+</Base>

@@ -1,0 +1,71 @@
+---
+import { render } from 'astro:content';
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import Whisper from '@/components/Whisper.astro';
+import KenyaMap from '@/components/KenyaMap.astro';
+import MonthStrip from '@/components/MonthStrip.astro';
+import JourneyCard from '@/components/JourneyCard.astro';
+import { getDestinations, kindLabel, toPin } from '@/lib/content';
+import { destinationNames, getPackageStore } from '@/lib/server/packages';
+
+export const prerender = false;
+
+const destinations = await getDestinations();
+const place = destinations.find((d) => d.id === Astro.params['slug']);
+if (!place) return Astro.rewrite('/404');
+const d = place.data;
+const { Content } = await render(place);
+const journeys = (await getPackageStore().list({ publishedOnly: true })).filter((j) => j.route.includes(place.id));
+const names = await destinationNames();
+---
+
+<Base title={d.name} description={d.summary} heroImage={d.photo.src}>
+  <PageHero
+    title={d.name}
+    kicker={d.tagline}
+    intro={d.summary}
+    image={d.photo}
+    crumbs={[{ href: '/destinations/', label: 'Destinations' }]}
+  />
+
+  <section class="section">
+    <div class="wrap detail">
+      <div class="detail-body">
+        <Content />
+        <div class="button-row" style="margin-top:32px">
+          <a class="button" href={`/plan/?add=${place.id}#sketch`}>Add {d.name} to my route</a>
+          <a class="button button--ghost" href="/contact/">Ask us about it</a>
+        </div>
+      </div>
+
+      <aside class="field-notes" aria-label="Field notes">
+        <h2>Field notes</h2>
+        <Whisper text={d.whisper} from="Our guides say" />
+        <dl class="facts">
+          <div class="full"><dt>Best for</dt><dd>{d.bestFor}</dd></div>
+          <div><dt>Plan for</dt><dd>{d.suggestedNights} night{d.suggestedNights === 1 ? '' : 's'} or more</dd></div>
+          <div><dt>Type</dt><dd>{kindLabel[d.kind]}</dd></div>
+          <div class="full"><dt>Getting there</dt><dd>{d.gettingThere}</dd></div>
+          <div class="full"><dt>When to go</dt><dd><MonthStrip good={d.goodMonths} /></dd></div>
+        </dl>
+        <KenyaMap pins={destinations.map(toPin)} highlight={[place.id]} uid="detail" label={`Map of Kenya showing where ${d.name} is`} />
+      </aside>
+    </div>
+  </section>
+
+  {
+    journeys.length > 0 && (
+      <section class="section section--deep" aria-labelledby="goes-here">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="goes-here">Journeys that go here</h2>
+          </div>
+          <div class="journey-grid">
+            {journeys.map((j) => <JourneyCard pkg={j} names={names} />)}
+          </div>
+        </div>
+      </section>
+    )
+  }
+</Base>

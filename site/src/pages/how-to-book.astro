@@ -1,0 +1,98 @@
+---
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import Whisper from '@/components/Whisper.astro';
+import { availableMethods } from '@/lib/packages/booking';
+import { getPaymentDeps, getRuntime } from '@/lib/server/payments';
+import { whatsappUrl } from '@/lib/enquiry';
+
+export const prerender = false;
+
+const { depositPercent, leadDays } = getRuntime().booking;
+const methods = availableMethods(getPaymentDeps());
+const deposits = depositPercent > 0 && depositPercent < 100;
+const wa = whatsappUrl('Hello Whizperz, I have a question about booking a trip.');
+
+const steps = [
+  { title: 'Choose a journey', text: 'Browse our journeys and open the one that calls to you. Every page shows the route, the days and the price per person.' },
+  { title: 'Pick your date and group', text: `Choose a start date at least ${leadDays} day${leadDays === 1 ? '' : 's'} away and tell us how many adults and children are coming. The total updates as you go.` },
+  {
+    title: deposits ? 'Pay a deposit or the full amount' : 'Pay securely',
+    text: deposits
+      ? `Hold your place with a ${depositPercent}% deposit, or pay everything at once. Choose M-Pesa or card.`
+      : 'Pay by M-Pesa or card. The amount is worked out by our system, never typed in by hand.',
+  },
+  { title: 'Get your confirmation', text: 'Your receipt arrives by email straight away. Then we call or message you to fine-tune the details: rooms, diets, flights, anything special.' },
+  ...(deposits ? [{ title: 'Pay the balance before you go', text: 'We send a private link for the rest. Pay it the same way, whenever suits you before the trip.' }] : []),
+];
+
+const ways = [
+  { name: 'M-Pesa', detail: 'Safaricom', note: 'Type your number and a prompt pops up on your phone. Enter your PIN and you’re done. Up to KES 250,000 per payment.', on: methods.mpesa },
+  { name: 'Card', detail: 'Visa and Mastercard, through Pesapal', note: 'You’re taken to Pesapal’s secure checkout, then straight back to us. Works for cards from anywhere.', on: methods.card },
+  { name: 'Bank transfer or cash', detail: 'By arrangement', note: 'For large groups or company bookings. Send us an enquiry and we’ll share our details and a written quote.', on: true },
+];
+---
+
+<Base title="How to book" description="Book and pay for a Whizperz journey online in a few minutes, by M-Pesa or card.">
+  <PageHero title="Book in a few minutes." kicker="How to book" intro="Pick a journey, choose your dates and pay online. Or talk it through with us first. Either way works." />
+
+  <section class="section section--dark">
+    <div class="wrap">
+      <ol class="steps steps--flow" data-reveal-group>
+        {steps.map((s) => (
+          <li>
+            <h3>{s.title}</h3>
+            <p>{s.text}</p>
+          </li>
+        ))}
+      </ol>
+      <div class="button-row" style="margin-top:40px">
+        <a class="button button--light" href="/packages/">Choose a journey</a>
+        <a class="button button--outline-light" href="/contact/">Ask us first</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <h2>Ways to pay</h2>
+        <p>Every payment goes through the provider’s own secure system. We never see your PIN or card number.</p>
+      </div>
+      <ul class="methods" data-reveal-group>
+        {ways.map((m) => (
+          <li>
+            <h3>{m.name}</h3>
+            <p><strong>{m.detail}</strong></p>
+            <p>{m.note}</p>
+            <span class:list={['status', m.on && 'status--live']}>{m.on ? 'Available' : 'Coming soon'}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section section--deep">
+    <div class="wrap detail">
+      <div class="prose" data-reveal>
+        <h2 style="margin-top:0">Good to know</h2>
+        <h3>Want something changed?</h3>
+        <p>Every journey can be adjusted: more days, a different lodge, a private vehicle. Send an enquiry from the journey page and we’ll come back with a tailored price, usually within a day. You can still pay online with a private link.</p>
+        {deposits && (
+          <>
+            <h3>About the deposit</h3>
+            <p>The {depositPercent}% deposit holds your dates and lets us book camps and vehicles. We send the link for the balance in good time before you travel.</p>
+          </>
+        )}
+        <h3>Changes and cancellations</h3>
+        <p>Plans change. Talk to us as early as you can and we’ll do our best to move your dates. Refunds go back the way you paid: to your M-Pesa number or your card.</p>
+        <h3>Travelling soon?</h3>
+        <p>Online booking opens {leadDays} day{leadDays === 1 ? '' : 's'} ahead. For anything sooner, message us and we’ll see what we can arrange.</p>
+      </div>
+      <aside class="field-notes" aria-label="Stay safe">
+        <Whisper text="We will never ask for your PIN or card number on the phone, WhatsApp or email. If anyone does, it isn’t us." from="From the Whizperz team" />
+        {wa && <a class="button button--whatsapp" href={wa} target="_blank" rel="noopener noreferrer">Ask on WhatsApp</a>}
+      </aside>
+    </div>
+  </section>
+</Base>
