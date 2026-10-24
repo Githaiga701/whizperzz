@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { rmSync } from 'node:fs';
-import { E2E_ADMIN_TOKEN, MOCK_PORT, MOCK_SMTP_PORT, SITE_PORT } from './tests/e2e/env';
+import { E2E_ADMIN_TOKEN, E2E_IPOS, E2E_NOWPAYMENTS, E2E_UNIPESA, E2E_USD_RATE, MOCK_PORT, MOCK_SMTP_PORT, SITE_PORT } from './tests/e2e/env';
 
 /**
  * Browser tests run against the real built server (npm run build first; npm run test:e2e does both)
@@ -35,6 +35,22 @@ const siteEnv = {
   PESAPAL_CALLBACK_SECRET: 'e2e-pesapal-cb',
   PESAPAL_IPN_ID: 'e2e-ipn',
   PESAPAL_BASE_URL: `${mock}/pesapalv3`,
+  USD_KES_RATE: String(E2E_USD_RATE),
+  IPOS_TPN: E2E_IPOS.tpn,
+  IPOS_API_KEY: E2E_IPOS.apiKey,
+  IPOS_SECRET_KEY: E2E_IPOS.secretKey,
+  IPOS_CALLBACK_SECRET: 'e2e-ipos-cb',
+  IPOS_PAYMENT_URL: `${mock}/ipos/payment`,
+  IPOS_API_URL: `${mock}/ipos/api`,
+  IPOS_AUTH_URL: `${mock}/ipos/auth`,
+  UNIPESA_MERCHANT_ID: E2E_UNIPESA.merchantId,
+  UNIPESA_SECRET_KEY: E2E_UNIPESA.secretKey,
+  UNIPESA_CALLBACK_SECRET: 'e2e-unipesa-cb',
+  UNIPESA_HPP_URL: `${mock}/unipesa/hpp`,
+  NOWPAYMENTS_API_KEY: E2E_NOWPAYMENTS.apiKey,
+  NOWPAYMENTS_IPN_SECRET: E2E_NOWPAYMENTS.ipnSecret,
+  NOWPAYMENTS_CALLBACK_SECRET: 'e2e-crypto-cb',
+  NOWPAYMENTS_BASE_URL: `${mock}/nowpayments/v1`,
 };
 
 export default defineConfig({

@@ -332,7 +332,7 @@ describe('status view', () => {
       amountKes: 85000,
       status: 'awaiting_payment',
       message: 'Ready to pay.',
-      methods: { mpesa: true, card: true },
+      methods: { mpesa: true, card: true, ipos: false, unipesa: false, crypto: false },
     });
     expect(JSON.stringify(view)).not.toContain('jane@example.com');
   });

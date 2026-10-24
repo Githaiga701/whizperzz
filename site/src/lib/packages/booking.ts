@@ -1,9 +1,12 @@
 import type { BookingConfig } from '@/lib/payments/config';
-import { pesapalReady } from '@/lib/payments/config';
 import { normalizeKenyanPhone } from '@/lib/payments/phone';
 import {
+  METHOD_LABEL,
   MPESA_MAX_KES,
   PaymentError,
+  payMethods,
+  startGateway,
+  type PayMethods,
   createQuote,
   getQuote,
   payUrl,
@@ -35,10 +38,12 @@ export interface BookResult {
   warning?: string;
 }
 
-/** Which ways to pay are switched on right now. */
-export function availableMethods(deps: PaymentDeps): { mpesa: boolean; card: boolean } {
-  return { mpesa: Boolean(deps.daraja), card: Boolean(deps.pesapal) && pesapalReady(deps.config) };
+/** Which ways to pay are switched on right now (before we know the amount, so M-Pesa's limit isn't applied). */
+export function availableMethods(deps: PaymentDeps): PayMethods {
+  return { ...payMethods(deps, 0), mpesa: Boolean(deps.daraja) };
 }
+
+const METHODS = ['mpesa', 'card', 'ipos', 'unipesa', 'crypto'] as const;
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -72,10 +77,12 @@ export async function bookPackage(deps: PaymentDeps, packages: PackageStore, cfg
   if (travelDate < min) throw new PaymentError(400, 'invalid_date', `The earliest date you can book online is ${prettyDate(min)}. For sooner trips, message us.`);
   if (travelDate > max) throw new PaymentError(400, 'invalid_date', 'Please choose a date within the next two years.');
 
-  const method = input.method === 'mpesa' || input.method === 'card' ? input.method : undefined;
+  const method = METHODS.find((m) => m === input.method);
   const methods = availableMethods(deps);
   if (!method) throw new PaymentError(400, 'invalid_method', 'Choose how you’d like to pay.');
-  if (!methods[method]) throw new PaymentError(503, 'unavailable', `${method === 'mpesa' ? 'M-Pesa' : 'Card'} payments aren’t available right now. Please choose another way to pay.`);
+  if (!methods[method]) {
+    throw new PaymentError(503, 'unavailable', `${method === 'card' ? 'Card' : METHOD_LABEL[method]} payments aren’t available right now. Please choose another way to pay.`);
+  }
 
   let price;
   try {
@@ -132,7 +139,11 @@ export async function bookPackage(deps: PaymentDeps, packages: PackageStore, cfg
       await startMpesa(deps, quote.ref, phoneRaw);
       return { ref: quote.ref, next: pay };
     }
-    const { redirectUrl } = await startPesapal(deps, quote.ref, { email });
+    if (method === 'card') {
+      const { redirectUrl } = await startPesapal(deps, quote.ref, { email });
+      return { ref: quote.ref, next: redirectUrl };
+    }
+    const { redirectUrl } = await startGateway(deps, method, quote.ref, { email, phone: phoneRaw });
     return { ref: quote.ref, next: redirectUrl };
   } catch (err) {
     if (!(err instanceof PaymentError)) throw err;

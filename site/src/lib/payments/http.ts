@@ -1,9 +1,11 @@
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+export type ProviderName = 'mpesa' | 'pesapal' | 'ipos' | 'unipesa' | 'crypto';
+
 /** An error from a payment provider, with enough detail to log but no secrets. */
 export class ProviderError extends Error {
   constructor(
-    readonly provider: 'mpesa' | 'pesapal',
+    readonly provider: ProviderName,
     message: string,
     readonly status?: number,
     readonly detail?: unknown,
@@ -17,7 +19,7 @@ const TIMEOUT_MS = 20_000;
 
 /** POST/GET JSON with a timeout. Throws ProviderError on network errors, non-2xx and non-JSON replies. */
 export async function requestJson<T>(
-  provider: 'mpesa' | 'pesapal',
+  provider: ProviderName,
   fetchImpl: FetchLike,
   url: string,
   init: RequestInit,
@@ -37,7 +39,14 @@ export async function requestJson<T>(
   }
   if (!res.ok) {
     const b = body as Record<string, unknown>;
-    const msg = (b['errorMessage'] ?? (b['error'] as Record<string, unknown> | undefined)?.['message'] ?? `HTTP ${res.status}`) as string;
+    const nested = b['error'];
+    const msg = String(
+      b['errorMessage'] ??
+        (nested && typeof nested === 'object' ? (nested as Record<string, unknown>)['message'] : nested) ??
+        b['message'] ??
+        b['responseMessage'] ??
+        `HTTP ${res.status}`,
+    );
     throw new ProviderError(provider, `${provider} error: ${msg}`, res.status, body);
   }
   return body as T;

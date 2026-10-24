@@ -10,11 +10,11 @@ import { travellersLabel } from '@/lib/packages/pricing';
 export const prerender = false;
 
 const ref = (Astro.params['ref'] ?? '').toUpperCase();
-const returningFromCard = Astro.url.searchParams.get('return') === 'card';
+const returningFromCheckout = Astro.url.searchParams.has('return');
 
 let view: QuoteView | undefined;
 try {
-  view = await getQuoteStatus(getPaymentDeps(), ref, { refresh: returningFromCard });
+  view = await getQuoteStatus(getPaymentDeps(), ref, { refresh: returningFromCheckout });
 } catch (err) {
   if (!(err instanceof PaymentError)) throw err;
   Astro.response.status = err.status;
@@ -22,7 +22,9 @@ try {
 
 const help = whatsappUrl(view ? `Hello Whizperz, I have a question about paying for booking ${view.ref}.` : 'Hello Whizperz, I have a question about paying for my trip.');
 const done = view?.status === 'paid';
-const anyMethod = view ? view.methods.mpesa || view.methods.card : false;
+const anyMethod = view ? Object.values(view.methods).some(Boolean) : false;
+const usd = view?.usdAmount !== undefined ? `USD ${view.usdAmount.toFixed(2)}` : '';
+const lastProvider = Astro.url.searchParams.get('return');
 /** Cancelled or refunded: nothing to pay. */
 const closed = view?.status === 'cancelled' || view?.status === 'refunded';
 const b = view?.booking;
@@ -66,7 +68,7 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
               <p class="form-note">We will never ask for your M-Pesa PIN or card details by phone, WhatsApp or email.</p>
             </div>
 
-            <div class="enquiry-form pay-panel" data-pay data-ref={view.ref} data-initial={view.status}>
+            <div class="enquiry-form pay-panel" data-pay data-ref={view.ref} data-initial={view.status} data-wait={lastProvider === 'crypto' ? '20' : '3'}>
               <div class="pay-status" data-pay-status role="status" aria-live="polite" data-state={view.status}>
                 {view.status === 'paid' && (
                   <>
@@ -99,6 +101,39 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
                       </label>
                       <button class="button" type="submit">Continue to card payment</button>
                       <p class="form-note">Visa, Mastercard and mobile money, through Pesapal’s secure page.</p>
+                    </form>
+                  )}
+                  {view.methods.ipos && (
+                    <form class="pay-method" data-pay-gateway="ipos">
+                      <h2>Pay with iPOS Pay</h2>
+                      <label class="field">
+                        Email for your iPOS Pay receipt
+                        <input name="email" type="email" autocomplete="email" required />
+                      </label>
+                      <button class="button" type="submit">Continue to iPOS Pay</button>
+                      <p class="form-note">Card payment in US dollars ({usd}), on iPOSpays’ secure page. Good for cards issued outside Kenya.</p>
+                    </form>
+                  )}
+                  {view.methods.unipesa && (
+                    <form class="pay-method" data-pay-gateway="unipesa">
+                      <h2>Pay with Unipesa</h2>
+                      <label class="field">
+                        Email <span class="hint">optional</span>
+                        <input name="email" type="email" autocomplete="email" />
+                      </label>
+                      <button class="button" type="submit">Continue to Unipesa</button>
+                      <p class="form-note">Mobile money and cards in Kenya and the region, on Unipesa’s secure page.</p>
+                    </form>
+                  )}
+                  {view.methods.crypto && (
+                    <form class="pay-method" data-pay-gateway="crypto">
+                      <h2>Pay with crypto</h2>
+                      <label class="field">
+                        Email for your crypto receipt
+                        <input name="email" type="email" autocomplete="email" required />
+                      </label>
+                      <button class="button" type="submit">Continue to crypto payment</button>
+                      <p class="form-note">USDT, USDC, Bitcoin, Ethereum and more through NOWPayments. Priced at {usd}; you pay the network fee.</p>
                     </form>
                   )}
                 </>
@@ -219,6 +254,24 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
       startPolling();
     });
 
+    const names: Record<string, string> = { ipos: 'iPOS Pay', unipesa: 'Unipesa', crypto: 'crypto' };
+    panel.querySelectorAll<HTMLFormElement>('[data-pay-gateway]').forEach((form) => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const method = form.dataset['payGateway']!;
+        const email = String(new FormData(form).get('email') ?? '');
+        busy(true);
+        show('pending', `Opening the secure ${names[method] ?? ''} payment page…`);
+        const { ok, data } = await post('/api/pay/gateway', { ref, method, email });
+        if (!ok || !data['redirectUrl']) {
+          show('failed', data['message'] ?? 'Something went wrong. Please try again.');
+          busy(false);
+          return;
+        }
+        window.location.assign(data['redirectUrl']);
+      });
+    });
+
     panel.querySelector<HTMLFormElement>('[data-pay-card]')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const email = String(new FormData(e.currentTarget as HTMLFormElement).get('email') ?? '');
@@ -233,6 +286,6 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
       window.location.assign(data['redirectUrl']);
     });
 
-    if (panel.dataset['initial'] === 'pending') startPolling(2);
+    if (panel.dataset['initial'] === 'pending') startPolling(Number(panel.dataset['wait'] ?? 3));
   }
 </script>

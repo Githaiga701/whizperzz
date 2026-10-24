@@ -39,10 +39,36 @@ if (Astro.request.method === 'POST') {
         anchor = '#email';
         break;
       case 'save_booking':
-        rt.settings.saveSection('booking', formObject(form, ['depositPercent', 'leadDays']));
+        rt.settings.saveSection('booking', formObject(form, ['depositPercent', 'leadDays', 'usdRate']));
         setFlash(Astro.cookies, 'ok', 'Booking rules saved. Journey pages use them straight away.');
         anchor = '#booking';
         break;
+      case 'save_ipos':
+        rt.settings.saveSection('ipos', formObject(form, ['env', 'tpn', 'authToken', 'apiKey', 'secretKey', 'paymentUrl', 'apiUrl', 'authUrl']));
+        setFlash(Astro.cookies, 'ok', 'iPOS Pay settings saved. Use “Test connection” to check them.');
+        anchor = '#ipos';
+        break;
+      case 'save_unipesa':
+        rt.settings.saveSection('unipesa', formObject(form, ['merchantId', 'secretKey', 'providerId', 'country', 'hppUrl', 'statusUrl']));
+        setFlash(Astro.cookies, 'ok', 'Unipesa settings saved. Send the notify address below to Unipesa.');
+        anchor = '#unipesa';
+        break;
+      case 'save_crypto':
+        rt.settings.saveSection('crypto', formObject(form, ['env', 'apiKey', 'ipnSecret']));
+        setFlash(Astro.cookies, 'ok', 'Crypto settings saved. Use “Test connection” to check them.');
+        anchor = '#crypto';
+        break;
+      case 'test_ipos':
+      case 'test_unipesa':
+      case 'test_crypto': {
+        const id = action.replace('test_', '') as 'ipos' | 'unipesa' | 'crypto';
+        const g = getRuntime().deps.gateways[id];
+        if (!g) throw new Error('Fill in and save these settings first (and the exchange rate under Online booking, for dollar payments).');
+        await g.ping();
+        setFlash(Astro.cookies, 'ok', id === 'unipesa' ? 'Unipesa settings look right. Make a small test payment to be sure.' : `${g.label} connection works. Your keys were accepted.`);
+        anchor = `#${id}`;
+        break;
+      }
       case 'test_mpesa': {
         const d = getRuntime().deps.daraja;
         if (!d) throw new Error('Fill in and save the M-Pesa keys first.');
@@ -115,6 +141,9 @@ const status = [
     ok: pesapalReady(config),
     text: pesapalReady(config) ? `On (${config.pesapal!.baseUrl.includes('cybqa') ? 'sandbox' : 'live'})` : config.pesapal ? 'Almost: press “Register IPN”' : 'Off: add your Pesapal keys below',
   },
+  { name: 'iPOS Pay', ok: Boolean(config.ipos), text: config.ipos ? `On (${config.ipos.paymentUrl.includes('.tech') ? 'sandbox' : 'live'})` : config.usdRate ? 'Off: add your iPOSpays details below' : 'Off: needs an exchange rate and your iPOSpays details' },
+  { name: 'Unipesa', ok: Boolean(config.unipesa), text: config.unipesa ? `On (${config.unipesa.country})` : 'Off: add your Unipesa details below' },
+  { name: 'Crypto', ok: Boolean(config.crypto), text: config.crypto ? `On (${config.crypto.baseUrl.includes('sandbox') ? 'sandbox' : 'live'})` : config.usdRate ? 'Off: add your NOWPayments keys below' : 'Off: needs an exchange rate and your NOWPayments keys' },
   { name: 'Email', ok: Boolean(rt.email), text: rt.email ? `On, sending from ${rt.email.from}` : 'Off: add your mail server below' },
 ];
 ---
@@ -141,7 +170,7 @@ const status = [
   }
 
   <nav class="settings-nav" aria-label="Settings sections">
-    <a href="#general">Site</a><a href="#booking">Booking</a><a href="#mpesa">M-Pesa</a><a href="#pesapal">Pesapal</a><a href="#email">Email</a>
+    <a href="#general">Site</a><a href="#booking">Booking</a><a href="#mpesa">M-Pesa</a><a href="#pesapal">Pesapal</a><a href="#ipos">iPOS Pay</a><a href="#unipesa">Unipesa</a><a href="#crypto">Crypto</a><a href="#email">Email</a>
   </nav>
 
   <div class="panel" style="margin-bottom:20px">
@@ -185,6 +214,7 @@ const status = [
         <SettingField name="depositPercent" label="Deposit (%)" type="number" hint={`Guests can pay this share now and the rest later. 0 or 100 means they always pay in full. Now: ${booking.depositPercent}%.`} placeholder="30" value={s.booking?.depositPercent} source={src('booking', 'depositPercent')} envValue={envOf('booking', 'depositPercent')} />
         <SettingField name="leadDays" label="Book at least this many days ahead" type="number" hint={`Closer trips need a message first. Now: ${booking.leadDays} day${booking.leadDays === 1 ? '' : 's'}.`} placeholder="3" value={s.booking?.leadDays} source={src('booking', 'leadDays')} envValue={envOf('booking', 'leadDays')} />
       </div>
+      <SettingField name="usdRate" label="Exchange rate (KES per US dollar)" hint="iPOS Pay and crypto charge in US dollars. Prices are converted at this rate, rounded up to the cent. Update it when the rate moves." placeholder="129.50" value={s.booking?.usdRate} source={src('booking', 'usdRate')} envValue={envOf('booking', 'usdRate')} />
       <button class="button button--small" type="submit">Save booking rules</button>
     </form>
   </section>
@@ -255,6 +285,94 @@ const status = [
     <p class="hint">
       {config.pesapal?.ipnId ? <>IPN registered (<span class="code">{config.pesapal.ipnId}</span>). Do it again if you change the site address.</> : 'Registering the IPN tells Pesapal where to send payment results. Card payments switch on once it’s done.'}
     </p>
+  </section>
+
+  <section class="panel" id="ipos" aria-labelledby="ipos-h">
+    <h2 id="ipos-h">iPOS Pay (iPOSpays card page)</h2>
+    <p class="hint">Card payments in US dollars through iPOSpays by Dejavoo. Your iPOSpays account manager (ISO) gives you a TPN; the keys are in the iPOSpays portal under Settings → Merchant Keys. See the setup guide for the steps.</p>
+    <form method="post" class="admin-form">
+      <input type="hidden" name="action" value="save_ipos" />
+      <label class="field">
+        Environment
+        <select name="env">
+          <option value="" selected={!s.ipos?.env}>Same as payments mode</option>
+          <option value="sandbox" selected={s.ipos?.env === 'sandbox'}>Sandbox (UAT)</option>
+          <option value="production" selected={s.ipos?.env === 'production'}>Live</option>
+        </select>
+      </label>
+      <SettingField name="tpn" label="TPN (terminal number)" hint="The e-commerce (CloudPOS) terminal number, usually 10–12 digits." value={s.ipos?.tpn} source={src('ipos', 'tpn')} envValue={envOf('ipos', 'tpn')} />
+      <SettingField name="authToken" label="Ecom auth token" hint="From the iPOSpays portal: Settings → Merchant Keys → Ecom token. Or leave this empty and fill in the API key and secret key below." secret source={src('ipos', 'authToken')} />
+      <div class="two">
+        <SettingField name="apiKey" label="API key" value={s.ipos?.apiKey} source={src('ipos', 'apiKey')} envValue={envOf('ipos', 'apiKey')} />
+        <SettingField name="secretKey" label="Secret key" secret source={src('ipos', 'secretKey')} />
+      </div>
+      <details class="action">
+        <summary>Live addresses (only if Dejavoo gives you different ones)</summary>
+        <div class="admin-form">
+          <SettingField name="paymentUrl" label="Payment page address" placeholder="https://payment.ipospays.com" value={s.ipos?.paymentUrl} source={src('ipos', 'paymentUrl')} envValue={envOf('ipos', 'paymentUrl')} />
+          <SettingField name="apiUrl" label="Status API address" placeholder="https://api.ipospays.com" value={s.ipos?.apiUrl} source={src('ipos', 'apiUrl')} envValue={envOf('ipos', 'apiUrl')} />
+          <SettingField name="authUrl" label="Token address" placeholder="https://auth.ipospays.com" value={s.ipos?.authUrl} source={src('ipos', 'authUrl')} envValue={envOf('ipos', 'authUrl')} />
+        </div>
+      </details>
+      <div class="actions"><button class="button button--small" type="submit">Save iPOS Pay</button></div>
+    </form>
+    <div class="actions" style="margin-top:12px">
+      <form method="post"><input type="hidden" name="action" value="test_ipos" /><button class="button button--small button--ghost" type="submit" disabled={!config.ipos}>Test connection</button></form>
+    </div>
+    {config.ipos && <p class="hint">Payment results go to: <span class="code">{config.ipos.notifyUrl.replace(config.ipos.callbackSecret, '••••')}</span> (sent with every payment, nothing to set up).</p>}
+  </section>
+
+  <section class="panel" id="unipesa" aria-labelledby="unipesa-h">
+    <h2 id="unipesa-h">Unipesa</h2>
+    <p class="hint">Mobile money and cards through Unipesa’s payment page. Unipesa sends the merchant ID and secret key when your account is approved.</p>
+    <form method="post" class="admin-form">
+      <input type="hidden" name="action" value="save_unipesa" />
+      <div class="two">
+        <SettingField name="merchantId" label="Merchant ID" value={s.unipesa?.merchantId} source={src('unipesa', 'merchantId')} envValue={envOf('unipesa', 'merchantId')} />
+        <SettingField name="secretKey" label="Secret key" hint="Used to sign payments and check Unipesa’s results." secret source={src('unipesa', 'secretKey')} />
+      </div>
+      <div class="two">
+        <SettingField name="country" label="Country" hint="Two letters. KE for Kenya." placeholder="KE" value={s.unipesa?.country} source={src('unipesa', 'country')} envValue={envOf('unipesa', 'country')} />
+        <SettingField name="providerId" label="Provider ID" hint="Optional. Which payment option Unipesa opens with (Unipesa gives you the numbers)." value={s.unipesa?.providerId} source={src('unipesa', 'providerId')} envValue={envOf('unipesa', 'providerId')} />
+      </div>
+      <details class="action">
+        <summary>Addresses (only if Unipesa gives you different ones)</summary>
+        <div class="admin-form">
+          <SettingField name="hppUrl" label="Payment page address" placeholder="https://hpp.unipesa.tech" value={s.unipesa?.hppUrl} source={src('unipesa', 'hppUrl')} envValue={envOf('unipesa', 'hppUrl')} />
+          <SettingField name="statusUrl" label="Status check address" hint="Optional. Unipesa’s transaction status address. With it, every payment is double-checked with Unipesa." value={s.unipesa?.statusUrl} source={src('unipesa', 'statusUrl')} envValue={envOf('unipesa', 'statusUrl')} />
+        </div>
+      </details>
+      <div class="actions"><button class="button button--small" type="submit">Save Unipesa</button></div>
+    </form>
+    <div class="actions" style="margin-top:12px">
+      <form method="post"><input type="hidden" name="action" value="test_unipesa" /><button class="button button--small button--ghost" type="submit" disabled={!config.unipesa}>Check settings</button></form>
+    </div>
+    {config.unipesa && <p class="hint">Payment results go to: <span class="code">{config.unipesa.notifyUrl.replace(config.unipesa.callbackSecret, '••••')}</span> (sent with every payment).</p>}
+  </section>
+
+  <section class="panel" id="crypto" aria-labelledby="crypto-h">
+    <h2 id="crypto-h">Crypto (NOWPayments)</h2>
+    <p class="hint">Guests pay in USDT, USDC, Bitcoin, Ethereum and other coins; NOWPayments sends the money to your wallet. Keys are in the NOWPayments dashboard under Settings → Payments.</p>
+    <form method="post" class="admin-form">
+      <input type="hidden" name="action" value="save_crypto" />
+      <label class="field">
+        Environment
+        <select name="env">
+          <option value="" selected={!s.crypto?.env}>Same as payments mode</option>
+          <option value="sandbox" selected={s.crypto?.env === 'sandbox'}>Sandbox</option>
+          <option value="production" selected={s.crypto?.env === 'production'}>Live</option>
+        </select>
+      </label>
+      <div class="two">
+        <SettingField name="apiKey" label="API key" secret source={src('crypto', 'apiKey')} />
+        <SettingField name="ipnSecret" label="IPN secret key" hint="Used to check that payment results really come from NOWPayments." secret source={src('crypto', 'ipnSecret')} />
+      </div>
+      <div class="actions"><button class="button button--small" type="submit">Save crypto</button></div>
+    </form>
+    <div class="actions" style="margin-top:12px">
+      <form method="post"><input type="hidden" name="action" value="test_crypto" /><button class="button button--small button--ghost" type="submit" disabled={!config.crypto}>Test connection</button></form>
+    </div>
+    {config.crypto && <p class="hint">Payment results go to: <span class="code">{config.crypto.notifyUrl.replace(config.crypto.callbackSecret, '••••')}</span> (sent with every payment).</p>}
   </section>
 
   <section class="panel" id="email" aria-labelledby="email-h">

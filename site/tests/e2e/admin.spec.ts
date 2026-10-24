@@ -152,6 +152,30 @@ test('settings: M-Pesa and Pesapal keys, test buttons and IPN', async () => {
 
 let mpesaRef = '';
 
+test('settings: iPOS Pay, Unipesa and crypto are on, and their test buttons work', async () => {
+  await page.goto('/admin/settings/');
+  const status = page.locator('.status-list');
+  await expect(status.locator('li', { hasText: 'iPOS Pay' })).toContainText('On');
+  await expect(status.locator('li', { hasText: 'Unipesa' })).toContainText('On (KE)');
+  await expect(status.locator('li', { hasText: 'Crypto' })).toContainText('On');
+  // The rate comes from the host's environment here, so it shows as the placeholder.
+  await expect(page.locator('#booking').getByLabel(/Exchange rate/)).toHaveAttribute('placeholder', '130');
+
+  await page.locator('#ipos').getByRole('button', { name: 'Test connection' }).click();
+  await expect(flash()).toContainText('iPOS Pay connection works');
+  await page.locator('#crypto').getByRole('button', { name: 'Test connection' }).click();
+  await expect(flash()).toContainText('Crypto connection works');
+  await page.locator('#unipesa').getByRole('button', { name: 'Check settings' }).click();
+  await expect(flash()).toContainText('Unipesa settings look right');
+  // The notify addresses are shown with their secret hidden.
+  await expect(page.locator('#crypto')).toContainText('/api/callbacks/crypto/••••');
+
+  // A bad value is refused with a clear message.
+  await page.locator('#unipesa').getByLabel(/^Country/).fill('Kenya');
+  await page.locator('#unipesa').getByRole('button', { name: 'Save Unipesa' }).click();
+  await expect(flash()).toContainText('two-letter country code');
+});
+
 test('create a quote and email the pay link', async ({ request }) => {
   mpesaRef = await newQuote({ name: 'Amina Odhiambo', amount: '64,500', email: 'amina@example.com', phone: '0722 000 111', description: 'Into the open, 2 adults, March' });
   await expect(flash()).toContainText(`Quote ${mpesaRef} created. Pay link emailed to amina@example.com`);

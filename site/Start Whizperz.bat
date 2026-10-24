@@ -12,6 +12,9 @@ if errorlevel 1 goto nonode
 node -e "const [a,b,c]=process.versions.node.split('.').map(Number);process.exit(a>22||(a===22&&(b>23||(b===23&&c>=4)))?0:1)"
 if errorlevel 1 goto oldnode
 
+echo   Stopping any copy of the site that is already running...
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 4321 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { $p = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue; if ($p -and $p.ProcessName -eq 'node') { Stop-Process -Id $p.Id -Force } }"
+
 echo   Getting everything ready. The first time takes a few minutes...
 call npm install --no-audit --no-fund --loglevel=error
 if errorlevel 1 goto failed

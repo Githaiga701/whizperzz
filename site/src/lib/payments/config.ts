@@ -39,6 +39,39 @@ const envSchema = z.object({
   PESAPAL_IPN_ID: blank,
   PESAPAL_CALLBACK_SECRET: blank,
   PESAPAL_BASE_URL: blank,
+
+  /** Shillings per US dollar. iPOS Pay and crypto charge in dollars, converted at this rate. */
+  USD_KES_RATE: blank,
+
+  IPOS_ENV: z.enum(['sandbox', 'production']).optional(),
+  /** The Terminal (TPN) number of the iPOSpays e-commerce terminal. */
+  IPOS_TPN: blank,
+  /** Either the auth token made in the iPOSpays portal (Settings → Merchant Keys / Ecom token)… */
+  IPOS_AUTH_TOKEN: blank,
+  /** …or the API key and secret key, which the site swaps for a token itself. */
+  IPOS_API_KEY: blank,
+  IPOS_SECRET_KEY: blank,
+  IPOS_CALLBACK_SECRET: blank,
+  /** Overrides, e.g. if Dejavoo gives different live addresses. */
+  IPOS_PAYMENT_URL: blank,
+  IPOS_API_URL: blank,
+  IPOS_AUTH_URL: blank,
+
+  UNIPESA_MERCHANT_ID: blank,
+  UNIPESA_SECRET_KEY: blank,
+  UNIPESA_CALLBACK_SECRET: blank,
+  /** Which payment option Unipesa's page opens with (their provider id). Empty lets Unipesa decide. */
+  UNIPESA_PROVIDER_ID: blank,
+  UNIPESA_COUNTRY: blank,
+  UNIPESA_HPP_URL: blank,
+  /** Unipesa's transaction status address, if they give you one. Used to double-check payments. */
+  UNIPESA_STATUS_URL: blank,
+
+  NOWPAYMENTS_ENV: z.enum(['sandbox', 'production']).optional(),
+  NOWPAYMENTS_API_KEY: blank,
+  NOWPAYMENTS_IPN_SECRET: blank,
+  NOWPAYMENTS_CALLBACK_SECRET: blank,
+  NOWPAYMENTS_BASE_URL: blank,
 });
 
 export type PaymentEnv = z.input<typeof envSchema>;
@@ -65,6 +98,37 @@ export interface PesapalConfig {
   callbackSecret: string;
 }
 
+export interface IposConfig {
+  paymentUrl: string;
+  apiUrl: string;
+  authUrl: string;
+  tpn: string;
+  authToken: string | undefined;
+  apiKey: string | undefined;
+  secretKey: string | undefined;
+  callbackSecret: string;
+  notifyUrl: string;
+}
+
+export interface UnipesaConfig {
+  hppUrl: string;
+  merchantId: string;
+  secretKey: string;
+  providerId: string | undefined;
+  country: string;
+  statusUrl: string | undefined;
+  callbackSecret: string;
+  notifyUrl: string;
+}
+
+export interface NowPaymentsConfig {
+  baseUrl: string;
+  apiKey: string;
+  ipnSecret: string;
+  callbackSecret: string;
+  notifyUrl: string;
+}
+
 export interface PaymentConfig {
   mode: 'sandbox' | 'production';
   siteUrl: string;
@@ -72,6 +136,11 @@ export interface PaymentConfig {
   adminToken: string | undefined;
   mpesa: MpesaConfig | undefined;
   pesapal: PesapalConfig | undefined;
+  /** Shillings per US dollar, for methods that charge in dollars. */
+  usdRate: number | undefined;
+  ipos: IposConfig | undefined;
+  unipesa: UnipesaConfig | undefined;
+  crypto: NowPaymentsConfig | undefined;
   /** Human-readable reasons a provider is switched off. Logged once at start-up. */
   warnings: string[];
 }
@@ -79,6 +148,19 @@ export interface PaymentConfig {
 export const MPESA_URLS = {
   sandbox: 'https://sandbox.safaricom.co.ke',
   production: 'https://api.safaricom.co.ke',
+} as const;
+
+export const IPOS_URLS = {
+  sandbox: { payment: 'https://payment.ipospays.tech', api: 'https://api.ipospays.tech', auth: 'https://auth.ipospays.tech' },
+  // Dejavoo confirms the live addresses when it issues live keys; they can be changed in Settings.
+  production: { payment: 'https://payment.ipospays.com', api: 'https://api.ipospays.com', auth: 'https://auth.ipospays.com' },
+} as const;
+
+export const UNIPESA_HPP_URL = 'https://hpp.unipesa.tech';
+
+export const NOWPAYMENTS_URLS = {
+  sandbox: 'https://api-sandbox.nowpayments.io/v1',
+  production: 'https://api.nowpayments.io/v1',
 } as const;
 
 export const PESAPAL_URLS = {
@@ -156,6 +238,73 @@ export function loadPaymentConfig(raw: Record<string, string | undefined>): Paym
     warnings.push(`Pesapal is off. Missing: ${pesapalMissing.join(', ')}.`);
   }
 
+  const rate = env.USD_KES_RATE ? Number(env.USD_KES_RATE) : undefined;
+  const usdRate = rate && Number.isFinite(rate) && rate > 0 ? rate : undefined;
+  const callback = (name: string, secret: string) => `${siteUrl}/api/callbacks/${name}/${encodeURIComponent(secret)}`;
+
+  let ipos: IposConfig | undefined;
+  const iposMissing = missing([
+    ['IPOS_TPN', env.IPOS_TPN],
+    ['IPOS_AUTH_TOKEN or IPOS_API_KEY + IPOS_SECRET_KEY', env.IPOS_AUTH_TOKEN ?? (env.IPOS_API_KEY && env.IPOS_SECRET_KEY ? 'ok' : undefined)],
+    ['IPOS_CALLBACK_SECRET', env.IPOS_CALLBACK_SECRET],
+    ['USD_KES_RATE', usdRate ? 'ok' : undefined],
+  ]);
+  if (iposMissing.length === 0) {
+    const urls = IPOS_URLS[env.IPOS_ENV ?? mode];
+    ipos = {
+      paymentUrl: (env.IPOS_PAYMENT_URL ?? urls.payment).replace(/\/+$/, ''),
+      apiUrl: (env.IPOS_API_URL ?? urls.api).replace(/\/+$/, ''),
+      authUrl: (env.IPOS_AUTH_URL ?? urls.auth).replace(/\/+$/, ''),
+      tpn: env.IPOS_TPN!,
+      authToken: env.IPOS_AUTH_TOKEN,
+      apiKey: env.IPOS_API_KEY,
+      secretKey: env.IPOS_SECRET_KEY,
+      callbackSecret: env.IPOS_CALLBACK_SECRET!,
+      notifyUrl: callback('ipos', env.IPOS_CALLBACK_SECRET!),
+    };
+  } else if (env.IPOS_TPN || env.IPOS_API_KEY || env.IPOS_AUTH_TOKEN) {
+    warnings.push(`iPOS Pay is off. Missing: ${iposMissing.join(', ')}.`);
+  }
+
+  let unipesa: UnipesaConfig | undefined;
+  const unipesaMissing = missing([
+    ['UNIPESA_MERCHANT_ID', env.UNIPESA_MERCHANT_ID],
+    ['UNIPESA_SECRET_KEY', env.UNIPESA_SECRET_KEY],
+    ['UNIPESA_CALLBACK_SECRET', env.UNIPESA_CALLBACK_SECRET],
+  ]);
+  if (unipesaMissing.length === 0) {
+    unipesa = {
+      hppUrl: (env.UNIPESA_HPP_URL ?? UNIPESA_HPP_URL).replace(/\/+$/, ''),
+      merchantId: env.UNIPESA_MERCHANT_ID!,
+      secretKey: env.UNIPESA_SECRET_KEY!,
+      providerId: env.UNIPESA_PROVIDER_ID,
+      country: (env.UNIPESA_COUNTRY ?? 'KE').toUpperCase(),
+      statusUrl: env.UNIPESA_STATUS_URL,
+      callbackSecret: env.UNIPESA_CALLBACK_SECRET!,
+      notifyUrl: callback('unipesa', env.UNIPESA_CALLBACK_SECRET!),
+    };
+  } else if (env.UNIPESA_MERCHANT_ID || env.UNIPESA_SECRET_KEY) {
+    warnings.push(`Unipesa is off. Missing: ${unipesaMissing.join(', ')}.`);
+  }
+
+  let crypto: NowPaymentsConfig | undefined;
+  const cryptoMissing = missing([
+    ['NOWPAYMENTS_API_KEY', env.NOWPAYMENTS_API_KEY],
+    ['NOWPAYMENTS_IPN_SECRET', env.NOWPAYMENTS_IPN_SECRET],
+    ['NOWPAYMENTS_CALLBACK_SECRET', env.NOWPAYMENTS_CALLBACK_SECRET],
+    ['USD_KES_RATE', usdRate ? 'ok' : undefined],
+  ]);
+  if (cryptoMissing.length === 0) {
+    crypto = {
+      baseUrl: (env.NOWPAYMENTS_BASE_URL ?? NOWPAYMENTS_URLS[env.NOWPAYMENTS_ENV ?? mode]).replace(/\/+$/, ''),
+      apiKey: env.NOWPAYMENTS_API_KEY!,
+      ipnSecret: env.NOWPAYMENTS_IPN_SECRET!,
+      callbackSecret: env.NOWPAYMENTS_CALLBACK_SECRET!,
+      notifyUrl: callback('crypto', env.NOWPAYMENTS_CALLBACK_SECRET!),
+    };
+  } else if (env.NOWPAYMENTS_API_KEY || env.NOWPAYMENTS_IPN_SECRET) {
+    warnings.push(`Crypto (NOWPayments) is off. Missing: ${cryptoMissing.join(', ')}.`);
+  }
 
   return {
     mode,
@@ -164,6 +313,10 @@ export function loadPaymentConfig(raw: Record<string, string | undefined>): Paym
     adminToken: env.ADMIN_TOKEN,
     mpesa,
     pesapal,
+    usdRate,
+    ipos,
+    unipesa,
+    crypto,
     warnings,
   };
 }

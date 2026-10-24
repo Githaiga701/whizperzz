@@ -19,8 +19,8 @@ const steps = [
   {
     title: deposits ? 'Pay a deposit or the full amount' : 'Pay securely',
     text: deposits
-      ? `Hold your place with a ${depositPercent}% deposit, or pay everything at once. Choose M-Pesa or card.`
-      : 'Pay by M-Pesa or card. The amount is worked out by our system, never typed in by hand.',
+      ? `Hold your place with a ${depositPercent}% deposit, or pay everything at once, by M-Pesa, card or any other way listed below.`
+      : 'Pay by M-Pesa, card or any other way listed below. The amount is worked out by our system, never typed in by hand.',
   },
   { title: 'Get your confirmation', text: 'Your receipt arrives by email straight away. Then we call or message you to fine-tune the details: rooms, diets, flights, anything special.' },
   ...(deposits ? [{ title: 'Pay the balance before you go', text: 'We send a private link for the rest. Pay it the same way, whenever suits you before the trip.' }] : []),
@@ -28,7 +28,10 @@ const steps = [
 
 const ways = [
   { name: 'M-Pesa', detail: 'Safaricom', note: 'Type your number and a prompt pops up on your phone. Enter your PIN and you’re done. Up to KES 250,000 per payment.', on: methods.mpesa },
-  { name: 'Card', detail: 'Visa and Mastercard, through Pesapal', note: 'You’re taken to Pesapal’s secure checkout, then straight back to us. Works for cards from anywhere.', on: methods.card },
+  { name: 'Pesapal', detail: 'Visa, Mastercard, Airtel Money and more', note: 'You’re taken to Pesapal’s secure checkout, then straight back to us. Charged in Kenyan shillings.', on: methods.card },
+  { name: 'iPOS Pay', detail: 'Cards, charged in US dollars', note: 'A secure card page by iPOSpays. Handy for cards issued abroad, since you pay in dollars at our posted rate.', on: methods.ipos },
+  { name: 'Unipesa', detail: 'Mobile money and cards', note: 'Pay through Unipesa’s secure page with the mobile money or card options it offers in your country.', on: methods.unipesa },
+  { name: 'Crypto', detail: 'USDT, USDC, Bitcoin, Ethereum and more', note: 'Through NOWPayments. You pay the dollar price in the coin you choose; confirmation takes a few minutes on the blockchain.', on: methods.crypto },
   { name: 'Bank transfer or cash', detail: 'By arrangement', note: 'For large groups or company bookings. Send us an enquiry and we’ll share our details and a written quote.', on: true },
 ];
 ---
@@ -85,7 +88,7 @@ const ways = [
           </>
         )}
         <h3>Changes and cancellations</h3>
-        <p>Plans change. Talk to us as early as you can and we’ll do our best to move your dates. Refunds go back the way you paid: to your M-Pesa number or your card.</p>
+        <p>Plans change. Talk to us as early as you can and we’ll do our best to move your dates. Refunds go back the way you paid: to your M-Pesa number, your card or your crypto wallet.</p>
         <h3>Travelling soon?</h3>
         <p>Online booking opens {leadDays} day{leadDays === 1 ? '' : 's'} ahead. For anything sooner, message us and we’ll see what we can arrange.</p>
       </div>

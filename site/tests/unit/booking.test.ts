@@ -183,7 +183,7 @@ describe('bookPackage', () => {
 
   it('only offers payment methods that are switched on', async () => {
     const { deps, packages, cfg } = await setup({ mpesa: false });
-    expect(availableMethods(deps)).toEqual({ mpesa: false, card: true });
+    expect(availableMethods(deps)).toEqual({ mpesa: false, card: true, ipos: false, unipesa: false, crypto: false });
     await expect(bookPackage(deps, packages, cfg, booking())).rejects.toThrow('M-Pesa payments aren’t available');
     const noIpn = makeDeps({ env: { ...FULL_ENV, PESAPAL_IPN_ID: undefined } });
     expect(availableMethods(noIpn.deps).card).toBe(false);

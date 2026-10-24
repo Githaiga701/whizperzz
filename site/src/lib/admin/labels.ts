@@ -22,6 +22,9 @@ export const REFUND_STATUS_LABEL: Record<RefundStatus, string> = {
 export const PROVIDER_LABEL: Record<Provider, string> = {
   mpesa: 'M-Pesa',
   pesapal: 'Card (Pesapal)',
+  ipos: 'iPOS Pay',
+  unipesa: 'Unipesa',
+  crypto: 'Crypto',
   manual: 'Recorded by hand',
 };
 

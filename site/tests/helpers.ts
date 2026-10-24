@@ -141,6 +141,7 @@ export function makeDeps(opts: { env?: Record<string, string | undefined>; mpesa
     store: new QuoteStore(persistence),
     daraja: opts.mpesa === false ? undefined : daraja,
     pesapal: opts.pesapal === false ? undefined : pesapal,
+    gateways: {},
     now: time.now,
     log: (level, message, data) => {
       logs.push(data ? { level, message, data } : { level, message });

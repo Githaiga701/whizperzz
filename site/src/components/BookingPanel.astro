@@ -1,22 +1,32 @@
 ---
 import type { TripPackage } from '@/lib/packages/store';
 import { kes } from '@/lib/packages/pricing';
-import { MPESA_MAX_KES } from '@/lib/payments/service';
+import { MPESA_MAX_KES, type PayMethods } from '@/lib/payments/service';
 
 interface Props {
   pkg: TripPackage;
   depositPercent: number;
   dateMin: string;
   dateMax: string;
-  methods: { mpesa: boolean; card: boolean };
+  methods: PayMethods;
+  /** Shillings per US dollar, for iPOS Pay and crypto. */
+  usdRate?: number | undefined;
 }
 
-const { pkg, depositPercent, dateMin, dateMax, methods } = Astro.props;
+const { pkg, depositPercent, dateMin, dateMax, methods, usdRate } = Astro.props;
 const p = pkg.pricing;
 const hasChildPrice = p.childKes !== null;
 const deposits = depositPercent > 0 && depositPercent < 100;
-const defaultMethod = methods.mpesa ? 'mpesa' : 'card';
-const config = { pricing: p, depositPercent, mpesaMax: MPESA_MAX_KES, packageId: pkg.id };
+const order = ['mpesa', 'card', 'ipos', 'unipesa', 'crypto'] as const;
+const defaultMethod = order.find((m) => methods[m]) ?? 'mpesa';
+const config = { pricing: p, depositPercent, mpesaMax: MPESA_MAX_KES, packageId: pkg.id, usdRate: usdRate ?? null };
+const choices = [
+  { id: 'mpesa', title: 'M-Pesa', note: 'A prompt on your phone' },
+  { id: 'card', title: 'Pesapal', note: 'Visa, Mastercard via Pesapal' },
+  { id: 'ipos', title: 'iPOS Pay', note: 'Card, charged in US dollars' },
+  { id: 'unipesa', title: 'Unipesa', note: 'Mobile money and cards' },
+  { id: 'crypto', title: 'Crypto', note: 'USDT, BTC, ETH and more' },
+] as const;
 ---
 
 <form class="booking" data-booking data-config={JSON.stringify(config)} novalidate>
@@ -91,26 +101,17 @@ const config = { pricing: p, depositPercent, mpesaMax: MPESA_MAX_KES, packageId:
     <legend><span class="step-n" aria-hidden="true">{deposits ? 3 : 2}</span> How to pay</legend>
     <div class="choice-row">
       {
-        methods.mpesa && (
-          <label class="choice">
-            <input type="radio" name="method" value="mpesa" checked={defaultMethod === 'mpesa'} />
-            <span>
-              <strong>M-Pesa</strong>
-              <small>A prompt on your phone</small>
-            </span>
-          </label>
-        )
-      }
-      {
-        methods.card && (
-          <label class="choice">
-            <input type="radio" name="method" value="card" checked={defaultMethod === 'card'} />
-            <span>
-              <strong>Card</strong>
-              <small>Visa, Mastercard via Pesapal</small>
-            </span>
-          </label>
-        )
+        choices
+          .filter((c) => methods[c.id])
+          .map((c) => (
+            <label class="choice">
+              <input type="radio" name="method" value={c.id} checked={defaultMethod === c.id} />
+              <span>
+                <strong>{c.title}</strong>
+                <small>{c.note}</small>
+              </span>
+            </label>
+          ))
       }
     </div>
   </fieldset>
@@ -147,6 +148,7 @@ const config = { pricing: p, depositPercent, mpesaMax: MPESA_MAX_KES, packageId:
     depositPercent: number;
     mpesaMax: number;
     packageId: string;
+    usdRate: number | null;
   }
 
   const form = document.querySelector<HTMLFormElement>('[data-booking]');
@@ -174,7 +176,14 @@ const config = { pricing: p, depositPercent, mpesaMax: MPESA_MAX_KES, packageId:
       const method = val('method');
       phoneInput.required = method === 'mpesa';
       phoneLabel.textContent = method === 'mpesa' ? 'M-Pesa number' : 'Phone (optional)';
-      submit.textContent = method === 'card' ? 'Book and continue to card payment' : 'Book and send M-Pesa prompt';
+      const buttons: Record<string, string> = {
+        mpesa: 'Book and send M-Pesa prompt',
+        card: 'Book and continue to card payment',
+        ipos: 'Book and continue to iPOS Pay',
+        unipesa: 'Book and continue to Unipesa',
+        crypto: 'Book and continue to crypto payment',
+      };
+      submit.textContent = buttons[method] ?? 'Book and pay';
       try {
         const price = calculatePrice(cfg.pricing, { adults: Number(val('adults')), children: Number(val('children') || 0), plan: val('plan') === 'deposit' ? 'deposit' : 'full' }, cfg.depositPercent);
         const deposit = Math.ceil((price.totalKes * price.depositPercent) / 100);
@@ -198,6 +207,10 @@ const config = { pricing: p, depositPercent, mpesaMax: MPESA_MAX_KES, packageId:
         row(`Total for ${travellersLabel(price.adults, price.children)}`, kes(price.totalKes));
         payNow.textContent = kes(price.payNowKes);
         note.textContent = price.plan === 'deposit' ? `Then ${kes(price.balanceKes)} before you travel.` : 'Paid in full. Nothing more to pay.';
+        if ((method === 'ipos' || method === 'crypto') && cfg.usdRate) {
+          const usd = Math.ceil((price.payNowKes / cfg.usdRate) * 100 - 1e-9) / 100;
+          note.textContent += ` Charged as USD ${usd.toFixed(2)}.`;
+        }
         const overMpesa = method === 'mpesa' && price.payNowKes > cfg.mpesaMax;
         submit.disabled = overMpesa;
         if (overMpesa) status.textContent = `M-Pesa allows up to ${kes(cfg.mpesaMax)} per payment. Choose card${price.plan === 'full' && cfg.depositPercent > 0 ? ' or pay a deposit' : ''}.`;

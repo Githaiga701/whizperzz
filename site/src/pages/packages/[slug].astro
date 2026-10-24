@@ -37,7 +37,7 @@ const rt = getRuntime();
 const deps = getPaymentDeps();
 const methods = availableMethods(deps);
 const win = dateWindow(deps.now(), rt.booking.leadDays);
-const bookable = pkg.pricing.adultKes !== null && (methods.mpesa || methods.card);
+const bookable = pkg.pricing.adultKes !== null && Object.values(methods).some(Boolean);
 ---
 
 <Base title={pkg.name} description={`${pkg.days} days: ${places}. ${pkg.summary}`} heroImage={pkg.photo.src}>
@@ -91,10 +91,10 @@ const bookable = pkg.pricing.adultKes !== null && (methods.mpesa || methods.card
           <div>
             <span class="kicker">Ready when you are</span>
             <h2>Book it in a few minutes.</h2>
-            <p class="lede">Pick your date and who’s coming, then pay {rt.booking.depositPercent > 0 && rt.booking.depositPercent < 100 ? `a ${rt.booking.depositPercent}% deposit or the full amount` : 'securely'} by M-Pesa or card. We confirm by email and call you to fine-tune the details.</p>
+            <p class="lede">Pick your date and who’s coming, then pay {rt.booking.depositPercent > 0 && rt.booking.depositPercent < 100 ? `a ${rt.booking.depositPercent}% deposit or the full amount` : 'securely'} by M-Pesa, card{methods.crypto ? ', crypto' : ''} and more. We confirm by email and call you to fine-tune the details.</p>
             <a class="link" href="/how-to-book/">How booking works</a>
           </div>
-          <BookingPanel pkg={pkg} depositPercent={rt.booking.depositPercent} dateMin={win.min} dateMax={win.max} methods={methods} />
+          <BookingPanel pkg={pkg} depositPercent={rt.booking.depositPercent} dateMin={win.min} dateMax={win.max} methods={methods} usdRate={deps.config.usdRate} />
         </div>
       </section>
     )

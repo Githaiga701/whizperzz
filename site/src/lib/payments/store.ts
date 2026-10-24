@@ -1,7 +1,9 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-export type Provider = 'mpesa' | 'pesapal' | 'manual';
+export type Provider = 'mpesa' | 'pesapal' | 'ipos' | 'unipesa' | 'crypto' | 'manual';
+/** Payment services that send the guest to their own checkout page and tell us the result afterwards. */
+export type GatewayId = 'ipos' | 'unipesa' | 'crypto';
 export type QuoteStatus = 'awaiting_payment' | 'paid' | 'cancelled' | 'refunded';
 export type PaymentStatus = 'pending' | 'paid' | 'failed';
 export type RefundStatus = 'requested' | 'completed' | 'failed';
@@ -26,6 +28,10 @@ export interface Payment {
   method?: string;
   /** Free-text note from whoever recorded a manual payment. */
   note?: string;
+  /** What the guest was actually charged when it wasn't in shillings (iPOS Pay and crypto charge in US dollars). */
+  charged?: { amount: number; currency: string; rate?: number };
+  /** The gateway's own id for the payment, when it's different from providerRef (NOWPayments payment_id). */
+  txnId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -165,6 +171,16 @@ export class QuoteStore {
     return Object.values(s.quotes)
       .map((q) => structuredClone(q))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  /** Finds a payment by the reference we sent the provider (our merchant reference). */
+  async findByMerchantRef(provider: Provider, merchantRef: string): Promise<{ quote: Quote; payment: Payment } | undefined> {
+    const s = await this.load();
+    for (const q of Object.values(s.quotes)) {
+      const p = q.payments.find((x) => x.provider === provider && x.merchantRef === merchantRef);
+      if (p) return { quote: structuredClone(q), payment: structuredClone(p) };
+    }
+    return undefined;
   }
 
   async findPayment(provider: Provider, providerRef: string): Promise<{ quote: Quote; payment: Payment } | undefined> {

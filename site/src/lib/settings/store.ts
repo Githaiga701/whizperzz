@@ -30,6 +30,33 @@ export interface Settings {
   booking?: {
     depositPercent?: string;
     leadDays?: string;
+    usdRate?: string;
+  };
+  ipos?: {
+    env?: 'sandbox' | 'production';
+    tpn?: string;
+    authToken?: string;
+    apiKey?: string;
+    secretKey?: string;
+    paymentUrl?: string;
+    apiUrl?: string;
+    authUrl?: string;
+    callbackSecret?: string;
+  };
+  unipesa?: {
+    merchantId?: string;
+    secretKey?: string;
+    providerId?: string;
+    country?: string;
+    hppUrl?: string;
+    statusUrl?: string;
+    callbackSecret?: string;
+  };
+  crypto?: {
+    env?: 'sandbox' | 'production';
+    apiKey?: string;
+    ipnSecret?: string;
+    callbackSecret?: string;
   };
   email?: {
     host?: string;
@@ -42,7 +69,10 @@ export interface Settings {
   };
 }
 
-export type Section = 'mpesa' | 'pesapal' | 'email' | 'booking';
+export type Section = 'mpesa' | 'pesapal' | 'email' | 'booking' | 'ipos' | 'unipesa' | 'crypto';
+
+/** Sections whose notify address contains a secret we create. */
+const CALLBACK_SECTIONS: readonly Section[] = ['mpesa', 'pesapal', 'ipos', 'unipesa', 'crypto'];
 
 /** Fields that are never shown back in the browser. Leaving them blank on save keeps the saved value. */
 export const SECRET_FIELDS: Record<Section, readonly string[]> = {
@@ -50,6 +80,9 @@ export const SECRET_FIELDS: Record<Section, readonly string[]> = {
   pesapal: ['consumerSecret', 'callbackSecret'],
   email: ['pass'],
   booking: [],
+  ipos: ['authToken', 'secretKey', 'callbackSecret'],
+  unipesa: ['secretKey', 'callbackSecret'],
+  crypto: ['apiKey', 'ipnSecret', 'callbackSecret'],
 };
 
 /** How each setting maps to an environment variable. */
@@ -77,6 +110,33 @@ export const ENV_MAP = {
   booking: {
     depositPercent: 'DEPOSIT_PERCENT',
     leadDays: 'BOOKING_LEAD_DAYS',
+    usdRate: 'USD_KES_RATE',
+  },
+  ipos: {
+    env: 'IPOS_ENV',
+    tpn: 'IPOS_TPN',
+    authToken: 'IPOS_AUTH_TOKEN',
+    apiKey: 'IPOS_API_KEY',
+    secretKey: 'IPOS_SECRET_KEY',
+    paymentUrl: 'IPOS_PAYMENT_URL',
+    apiUrl: 'IPOS_API_URL',
+    authUrl: 'IPOS_AUTH_URL',
+    callbackSecret: 'IPOS_CALLBACK_SECRET',
+  },
+  unipesa: {
+    merchantId: 'UNIPESA_MERCHANT_ID',
+    secretKey: 'UNIPESA_SECRET_KEY',
+    providerId: 'UNIPESA_PROVIDER_ID',
+    country: 'UNIPESA_COUNTRY',
+    hppUrl: 'UNIPESA_HPP_URL',
+    statusUrl: 'UNIPESA_STATUS_URL',
+    callbackSecret: 'UNIPESA_CALLBACK_SECRET',
+  },
+  crypto: {
+    env: 'NOWPAYMENTS_ENV',
+    apiKey: 'NOWPAYMENTS_API_KEY',
+    ipnSecret: 'NOWPAYMENTS_IPN_SECRET',
+    callbackSecret: 'NOWPAYMENTS_CALLBACK_SECRET',
   },
   email: {
     host: 'SMTP_HOST',
@@ -96,7 +156,7 @@ export function settingsToEnv(s: Settings): Record<string, string> {
   };
   put(ENV_MAP.siteUrl, s.siteUrl);
   put(ENV_MAP.paymentsMode, s.paymentsMode);
-  for (const section of ['mpesa', 'pesapal', 'email', 'booking'] as const) {
+  for (const section of ['mpesa', 'pesapal', 'email', 'booking', 'ipos', 'unipesa', 'crypto'] as const) {
     const values = (s[section] ?? {}) as Record<string, unknown>;
     for (const [field, key] of Object.entries(ENV_MAP[section])) put(key, values[field]);
   }
@@ -120,6 +180,11 @@ function validateField(field: string, v: string): void {
   if (field === 'notifyTo' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error('The alerts address doesn’t look like an email address.');
   if (field === 'depositPercent' && !(/^\d{1,3}$/.test(v) && Number(v) <= 100)) throw new Error('The deposit is a percentage from 0 to 100.');
   if (field === 'leadDays' && !(/^\d{1,3}$/.test(v) && Number(v) <= 365)) throw new Error('Days ahead must be a number from 0 to 365.');
+  if (field === 'usdRate' && !(/^\d{1,4}(\.\d{1,4})?$/.test(v) && Number(v) >= 1)) throw new Error('The exchange rate is shillings per US dollar, like 129.50.');
+  if (field === 'tpn' && !/^[A-Za-z0-9]{6,20}$/.test(v)) throw new Error('The TPN is the 10 to 12 digit terminal number from iPOSpays.');
+  if (field === 'providerId' && !/^\d{1,6}$/.test(v)) throw new Error('The Unipesa provider ID is a number, like 12.');
+  if (field === 'country' && !/^[A-Za-z]{2}$/.test(v)) throw new Error('Use the two-letter country code, like KE.');
+  if (['paymentUrl', 'apiUrl', 'authUrl', 'hppUrl', 'statusUrl'].includes(field) && !/^https:\/\/[^\s]+$/.test(v)) throw new Error('Addresses must start with https://.');
   if (v.length > 4000) throw new Error('That value is too long.');
 }
 
@@ -178,7 +243,7 @@ export class SettingsStore {
     }
 
     // Create a callback secret if there isn't one, unless the host's environment already provides it.
-    if ((section === 'mpesa' || section === 'pesapal') && !current['callbackSecret']) {
+    if (CALLBACK_SECTIONS.includes(section) && !current['callbackSecret']) {
       const envKey = (ENV_MAP[section] as Record<string, string>)['callbackSecret']!;
       if (!env[envKey]?.trim()) current['callbackSecret'] = newSecret();
     }

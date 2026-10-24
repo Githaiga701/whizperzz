@@ -14,6 +14,10 @@ const firstName = (q: Quote) => q.guestName.split(/\s+/)[0] ?? q.guestName;
 function methodLabel(p: Payment): string {
   if (p.provider === 'mpesa') return 'M-Pesa';
   if (p.provider === 'pesapal') return p.method ? `${p.method} (Pesapal)` : 'Card (Pesapal)';
+  const charged = p.charged && p.charged.currency !== 'KES' ? `, charged ${p.charged.currency} ${p.charged.amount.toFixed(2)}` : '';
+  if (p.provider === 'ipos') return `${p.method ?? 'Card'} (iPOS Pay${charged})`;
+  if (p.provider === 'unipesa') return `${p.method ?? 'Unipesa'}${p.method ? ' (Unipesa)' : ''}`;
+  if (p.provider === 'crypto') return `Crypto${p.method ? `: ${p.method}` : ''}${charged ? ` (${charged.slice(2)})` : ''}`;
   return p.method ?? 'Recorded by our team';
 }
 

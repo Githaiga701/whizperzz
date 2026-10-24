@@ -1,6 +1,7 @@
 import { loadBookingConfig, loadEmailConfig, loadPaymentConfig, type BookingConfig, type EmailConfig } from '@/lib/payments/config';
 import { createDaraja } from '@/lib/payments/mpesa';
 import { createPesapal } from '@/lib/payments/pesapal';
+import { createGateways } from '@/lib/payments/gateways';
 import { PaymentError, isAdmin, type LogFn, type PaymentDeps } from '@/lib/payments/service';
 import { QuoteStore, filePersistence } from '@/lib/payments/store';
 import { SettingsStore, mergeEnv } from '@/lib/settings/store';
@@ -62,6 +63,7 @@ export function getRuntime(): Runtime {
     store: b.store,
     daraja: config.mpesa ? createDaraja(config.mpesa) : undefined,
     pesapal: config.pesapal ? createPesapal(config.pesapal) : undefined,
+    gateways: createGateways(config),
     now: () => new Date(),
     log,
     notify: async () => undefined,

@@ -3,6 +3,8 @@ import { pesapalReady, type PaymentConfig } from './config';
 import { ProviderError } from './http';
 import { parseReversalResult, parseStkCallback, friendlyResult, type Daraja } from './mpesa';
 import { mapPesapalStatus, type Pesapal, type PesapalIpn } from './pesapal';
+import { kesToUsd, sameMoney, type GatewayNotice, type GatewayResult, type Gateways } from './gateways';
+import type { GatewayId } from './store';
 import { maskPhone, normalizeKenyanPhone } from './phone';
 import { isQuoteRef, newId, newQuoteRef } from './reference';
 import type { Payment, Quote, QuoteStore, Refund } from './store';
@@ -30,6 +32,8 @@ export interface PaymentDeps {
   store: QuoteStore;
   daraja: Daraja | undefined;
   pesapal: Pesapal | undefined;
+  /** iPOS Pay, Unipesa and crypto: whichever are set up. */
+  gateways: Gateways;
   now: () => Date;
   log: LogFn;
   /** Sends emails for an event. Errors are logged, never shown to guests or providers. */
@@ -48,6 +52,32 @@ export class PaymentError extends Error {
   }
 }
 
+/** Ways a guest can pay. "card" is Pesapal (cards, Airtel Money and more). */
+export interface PayMethods {
+  mpesa: boolean;
+  card: boolean;
+  ipos: boolean;
+  unipesa: boolean;
+  crypto: boolean;
+}
+
+export const METHOD_LABEL: Record<keyof PayMethods, string> = {
+  mpesa: 'M-Pesa',
+  card: 'Pesapal',
+  ipos: 'iPOS Pay',
+  unipesa: 'Unipesa',
+  crypto: 'Crypto',
+};
+
+export const PROVIDER_NAME: Record<string, string> = {
+  mpesa: 'M-Pesa',
+  pesapal: 'Pesapal',
+  ipos: 'iPOS Pay',
+  unipesa: 'Unipesa',
+  crypto: 'crypto (NOWPayments)',
+  manual: 'manual',
+};
+
 export type PublicStatus = 'awaiting_payment' | 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded';
 
 export interface QuoteView {
@@ -58,7 +88,9 @@ export interface QuoteView {
   status: PublicStatus;
   message: string;
   receipt?: string;
-  methods: { mpesa: boolean; card: boolean };
+  methods: PayMethods;
+  /** The dollar amount for iPOS Pay and crypto, when an exchange rate is set. */
+  usdAmount?: number;
   /** Set when the guest booked a journey online (or this is the balance for one). */
   booking?: {
     packageName: string;
@@ -214,8 +246,16 @@ function markPaid(q: Quote, paymentId: string, receipt: string | undefined, at: 
   delete p.failureReason;
   q.status = 'paid';
   q.paidAt = at.toISOString();
-  const how = p.provider === 'mpesa' ? 'M-Pesa' : p.provider === 'pesapal' ? `card (${p.method ?? 'Pesapal'})` : (p.method ?? 'manual');
-  addHistory(q, at, p.provider === 'manual' ? 'admin' : 'system', `Paid ${kes(p.amountKes)} by ${how}${p.receipt ? `, receipt ${p.receipt}` : ''}.`);
+  const how =
+    p.provider === 'mpesa'
+      ? 'M-Pesa'
+      : p.provider === 'pesapal'
+        ? `card (${p.method ?? 'Pesapal'})`
+        : p.provider === 'manual'
+          ? (p.method ?? 'manual')
+          : `${PROVIDER_NAME[p.provider]}${p.method ? ` (${p.method})` : ''}`;
+  const charged = p.charged && p.charged.currency !== 'KES' ? ` (charged ${p.charged.currency} ${p.charged.amount.toFixed(2)})` : '';
+  addHistory(q, at, p.provider === 'manual' ? 'admin' : 'system', `Paid ${kes(p.amountKes)}${charged} by ${how}${p.receipt ? `, receipt ${p.receipt}` : ''}.`);
   return true;
 }
 
@@ -226,7 +266,7 @@ function markFailed(q: Quote, paymentId: string, reason: string, at: Date, flag?
   p.failureReason = reason;
   if (flag) p.flag = flag;
   p.updatedAt = at.toISOString();
-  addHistory(q, at, 'system', flag ? `Needs checking: ${flag}` : `${p.provider === 'mpesa' ? 'M-Pesa' : 'Card'} payment failed: ${reason}`);
+  addHistory(q, at, 'system', flag ? `Needs checking: ${flag}` : `${p.provider === 'mpesa' ? 'M-Pesa' : p.provider === 'pesapal' ? 'Card' : PROVIDER_NAME[p.provider]} payment failed: ${reason}`);
 }
 
 /* ---------- M-Pesa ---------- */
@@ -475,6 +515,159 @@ export async function handlePesapalIpn(deps: PaymentDeps, ipn: PesapalIpn): Prom
   }
 }
 
+/* ---------- iPOS Pay, Unipesa and crypto (hosted checkout pages) ---------- */
+
+/** Which ways to pay are switched on, for a given amount. */
+export function payMethods(deps: PaymentDeps, amountKes: number): PayMethods {
+  return {
+    mpesa: Boolean(deps.daraja) && amountKes <= MPESA_MAX_KES,
+    card: Boolean(deps.pesapal) && pesapalReady(deps.config),
+    ipos: Boolean(deps.gateways.ipos),
+    unipesa: Boolean(deps.gateways.unipesa),
+    crypto: Boolean(deps.gateways.crypto),
+  };
+}
+
+/** Sends the guest to iPOS Pay, Unipesa or NOWPayments. The amount always comes from the quote. */
+export async function startGateway(
+  deps: PaymentDeps,
+  id: GatewayId,
+  ref: unknown,
+  contactInput: { email?: unknown; phone?: unknown },
+): Promise<{ redirectUrl: string }> {
+  const quote = await requireQuote(deps, ref);
+  requirePayable(quote);
+  const gateway = deps.gateways[id];
+  if (!gateway) throw new PaymentError(503, 'unavailable', `${PROVIDER_NAME[id]} payments aren’t switched on yet. Please choose another way to pay.`);
+  let email = quote.email;
+  if (typeof contactInput.email === 'string' && contactInput.email.trim() !== '') {
+    if (!EMAIL.test(contactInput.email.trim())) throw new PaymentError(400, 'invalid_email', 'That email address doesn’t look right.');
+    email = contactInput.email.trim();
+  }
+  let phone = quote.phone;
+  if (typeof contactInput.phone === 'string' && contactInput.phone.trim() !== '') phone = normalizeKenyanPhone(contactInput.phone) ?? phone;
+
+  let charged: { amount: number; currency: string; rate?: number };
+  if (gateway.currency === 'USD') {
+    const rate = deps.config.usdRate;
+    if (!rate) throw new PaymentError(503, 'unavailable', 'Dollar payments need an exchange rate. Please choose another way to pay.');
+    charged = { amount: kesToUsd(quote.amountKes, rate), currency: 'USD', rate };
+  } else {
+    charged = { amount: quote.amountKes, currency: 'KES' };
+  }
+  const merchantRef = gateway.merchantRef(quote.ref, quote.payments.filter((p) => p.provider === id).length + 1);
+  let res;
+  try {
+    res = await gateway.startCheckout({
+      merchantRef,
+      amount: charged.amount,
+      description: `${quote.description} (${quote.ref})`,
+      returnUrl: `${payUrl(deps.config, quote.ref)}?return=${id}`,
+      email,
+      phone,
+      name: quote.guestName,
+    });
+  } catch (err) {
+    deps.log('error', `${gateway.label} checkout failed`, { ref: quote.ref, error: (err as Error).message });
+    throw new PaymentError(502, 'provider_error', `We couldn’t open the ${gateway.label} payment page just now. Please try again in a minute, or choose another way to pay.`);
+  }
+  const now = deps.now();
+  const at = now.toISOString();
+  await deps.store.update(quote.ref, (q) => {
+    q.payments.push({ id: newId('pay'), provider: id, status: 'pending', amountKes: quote.amountKes, providerRef: res.providerRef, merchantRef, charged, createdAt: at, updatedAt: at });
+    if (email && !q.email) q.email = email;
+    const money = charged.currency === 'KES' ? '' : ` for ${charged.currency} ${charged.amount.toFixed(2)} at ${charged.rate} KES per dollar`;
+    addHistory(q, now, 'guest', `Opened ${gateway.label} checkout${money}.`);
+  });
+  deps.log('info', `${gateway.label} checkout opened`, { ref: quote.ref, merchantRef, charged });
+  return { redirectUrl: res.redirectUrl };
+}
+
+/** Applies what a gateway told us, after checking it's about this payment and the right amount. */
+async function applyGatewayResult(deps: PaymentDeps, ref: string, payment: Payment, r: GatewayResult): Promise<'paid' | 'failed' | 'pending'> {
+  const now = deps.now();
+  const label = PROVIDER_NAME[payment.provider];
+  const expected = payment.charged ?? { amount: payment.amountKes, currency: 'KES' };
+  const problems: string[] = [];
+  if (r.merchantRef && r.merchantRef !== payment.merchantRef) problems.push(`reference ${r.merchantRef}`);
+  if (r.currency && r.currency.toUpperCase() !== expected.currency) problems.push(`currency ${r.currency}`);
+  if (r.amount !== undefined && !sameMoney(r.amount, expected.amount)) problems.push(`amount ${r.currency ?? expected.currency} ${r.amount}`);
+
+  if ((r.outcome === 'paid' && problems.length) || r.outcome === 'underpaid') {
+    const flag =
+      r.outcome === 'underpaid'
+        ? `${label}: ${r.reason ?? 'the guest paid less than the amount due.'}`
+        : `${label} reported a completed payment that doesn’t match (${problems.join(', ')}; expected ${expected.currency} ${expected.amount}).`;
+    await deps.store.update(ref, (q) => markFailed(q, payment.id, 'We received a payment we need to check by hand. We’ll be in touch shortly.', now, flag));
+    deps.log('warn', `${label} mismatch`, { ref, problems });
+    fireNotify(deps, { type: 'flagged', ref, paymentId: payment.id, flag });
+    return 'failed';
+  }
+  if (r.outcome === 'paid') {
+    let changed = false;
+    await deps.store.update(ref, (q) => {
+      changed = markPaid(q, payment.id, r.receipt, now, { method: r.method });
+    });
+    if (changed) {
+      deps.log('info', `${label} payment confirmed`, { ref });
+      fireNotify(deps, { type: 'paid', ref, paymentId: payment.id });
+    }
+    return 'paid';
+  }
+  if (r.outcome === 'failed') {
+    await deps.store.update(ref, (q) => markFailed(q, payment.id, r.reason ?? 'The payment did not go through.', now));
+    return 'failed';
+  }
+  await deps.store.update(ref, (q) => {
+    const p = q.payments.find((x) => x.id === payment.id);
+    if (p) p.updatedAt = now.toISOString();
+  });
+  return 'pending';
+}
+
+async function checkGateway(deps: PaymentDeps, ref: string, payment: Payment): Promise<'paid' | 'failed' | 'pending' | 'unknown'> {
+  const gateway = deps.gateways[payment.provider as GatewayId];
+  if (!gateway) return 'unknown';
+  const r = await gateway.checkStatus({ merchantRef: payment.merchantRef ?? '', providerRef: payment.providerRef, txnId: payment.txnId, amount: payment.charged?.amount });
+  if (!r) return 'unknown';
+  return applyGatewayResult(deps, ref, payment, r);
+}
+
+/**
+ * A gateway's notification. We only believe a status that came straight from the gateway's API,
+ * or a notification carrying a valid signature made with our secret key.
+ */
+export async function handleGatewayNotice(deps: PaymentDeps, id: GatewayId, notice: GatewayNotice): Promise<'paid' | 'failed' | 'pending' | 'ignored' | 'rejected' | 'unverified'> {
+  const gateway = deps.gateways[id];
+  if (!gateway) return 'ignored';
+  const read = gateway.readNotice(notice);
+  if (!read) {
+    deps.log('warn', `${gateway.label} notification rejected (bad signature or not ours)`);
+    return 'rejected';
+  }
+  const found = read.merchantRef ? await deps.store.findByMerchantRef(id, read.merchantRef) : undefined;
+  if (!found) {
+    deps.log('warn', `${gateway.label} notification for an unknown payment`, { merchantRef: read.merchantRef });
+    return 'ignored';
+  }
+  let payment = found.payment;
+  if (read.txnId && payment.txnId !== read.txnId) {
+    await deps.store.update(found.quote.ref, (q) => {
+      const p = q.payments.find((x) => x.id === payment.id);
+      if (p) p.txnId = read.txnId!;
+    });
+    payment = { ...payment, txnId: read.txnId };
+  }
+  if (payment.status !== 'pending') return 'ignored';
+  const asked = await gateway.checkStatus({ merchantRef: payment.merchantRef ?? '', providerRef: payment.providerRef, txnId: payment.txnId, amount: payment.charged?.amount });
+  const result = asked ?? read.verified;
+  if (!result) {
+    deps.log('warn', `${gateway.label} notification could not be confirmed`, { ref: found.quote.ref });
+    return 'unverified';
+  }
+  return applyGatewayResult(deps, found.quote.ref, payment, result);
+}
+
 /* ---------- Status ---------- */
 
 /** Asks the providers about any payment still waiting, so the page updates even if a callback was missed. */
@@ -491,6 +684,8 @@ async function reconcile(deps: PaymentDeps, quote: Quote): Promise<void> {
         }
       } else if (p.provider === 'pesapal' && deps.pesapal) {
         await checkPesapal(deps, quote.ref, p);
+      } else if (p.provider === 'ipos' || p.provider === 'unipesa' || p.provider === 'crypto') {
+        await checkGateway(deps, quote.ref, p);
       }
     } catch (err) {
       if (!(err instanceof ProviderError)) throw err;
@@ -500,13 +695,14 @@ async function reconcile(deps: PaymentDeps, quote: Quote): Promise<void> {
 }
 
 export function viewQuote(deps: PaymentDeps, quote: Quote): QuoteView {
-  const methods = { mpesa: Boolean(deps.daraja) && quote.amountKes <= MPESA_MAX_KES, card: Boolean(deps.pesapal) && pesapalReady(deps.config) };
+  const methods = payMethods(deps, quote.amountKes);
   const base = {
     ref: quote.ref,
     firstName: quote.guestName.split(/\s+/)[0] ?? quote.guestName,
     description: quote.description,
     amountKes: quote.amountKes,
     methods,
+    ...(deps.config.usdRate ? { usdAmount: kesToUsd(quote.amountKes, deps.config.usdRate) } : {}),
     ...(quote.booking
       ? {
           booking: {
@@ -535,7 +731,14 @@ export function viewQuote(deps: PaymentDeps, quote: Quote): QuoteView {
     return {
       ...base,
       status: 'pending',
-      message: last.provider === 'mpesa' ? 'Waiting for you to enter your M-Pesa PIN…' : 'Waiting for the card payment to be confirmed…',
+      message:
+        last.provider === 'mpesa'
+          ? 'Waiting for you to enter your M-Pesa PIN…'
+          : last.provider === 'pesapal'
+            ? 'Waiting for the card payment to be confirmed…'
+            : last.provider === 'crypto'
+              ? 'Waiting for the crypto payment to be confirmed on the blockchain. This can take a few minutes…'
+              : `Waiting for ${PROVIDER_NAME[last.provider]} to confirm the payment…`,
     };
   }
   if (last?.status === 'failed') return { ...base, status: 'failed', message: last.failureReason ?? 'The payment did not go through. Please try again.' };
@@ -689,8 +892,15 @@ export async function refundPayment(deps: PaymentDeps, ref: unknown, input: Refu
       deps.log('error', 'Pesapal refund request failed', { ref: quote.ref, error: (err as Error).message });
       throw new PaymentError(502, 'provider_error', `Pesapal didn’t accept the refund: ${(err as Error).message.replace(/^Pesapal refund failed: /, '')}`);
     }
-  } else {
+  } else if (payment.provider === 'manual') {
     throw new PaymentError(400, 'manual_only', 'This payment was recorded by hand, so record the refund by hand too.');
+  } else {
+    const where = payment.provider === 'ipos' ? 'your iPOSpays portal' : payment.provider === 'unipesa' ? 'your Unipesa merchant dashboard' : 'your NOWPayments dashboard';
+    throw new PaymentError(
+      400,
+      'manual_only',
+      `${PROVIDER_NAME[payment.provider]} refunds are made in ${where}. Do it there, then choose “I’ve already paid it back another way” to record it here.`,
+    );
   }
 
   await deps.store.update(quote.ref, (q) => {

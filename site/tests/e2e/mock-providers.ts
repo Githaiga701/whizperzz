@@ -8,6 +8,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { SMTPServer } from 'smtp-server';
 import { simpleParser } from 'mailparser';
+import { unipesaSign, verifyUnipesa } from '../../src/lib/payments/gateways/unipesa';
+import { nowPaymentsSignature } from '../../src/lib/payments/gateways/nowpayments';
+import { E2E_IPOS, E2E_NOWPAYMENTS, E2E_UNIPESA } from './env';
 
 const PORT = Number(process.env['MOCK_PORT'] ?? 4398);
 const SMTP_PORT = Number(process.env['MOCK_SMTP_PORT'] ?? 4397);
@@ -37,6 +40,54 @@ interface Mail {
 }
 const mails: Mail[] = [];
 const receipts = new Set<string>();
+
+interface HostedPayment {
+  id: string;
+  ref: string;
+  amount: number;
+  currency: string;
+  returnUrl: string;
+  notifyUrl: string;
+  status: 'pending' | 'paid' | 'declined' | 'partial';
+  extra: Record<string, string>;
+}
+/** iPOS Pay, Unipesa and NOWPayments payments, by our id. */
+const hosted = new Map<string, HostedPayment>();
+
+function page(title: string, body: string) {
+  return `<!doctype html><title>${title}</title><h1>${title}</h1>${body}`;
+}
+
+function redirect(res: ServerResponse, to: string) {
+  res.writeHead(303, { Location: to });
+  res.end();
+}
+
+async function postRaw(url: string, body: string, headers: Record<string, string>): Promise<void> {
+  try {
+    await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
+  } catch (e) {
+    console.error(`[mock] callback to ${url} failed: ${(e as Error).message}`);
+  }
+}
+
+function nowPayment(h: HostedPayment) {
+  return {
+    payment_id: Number(h.extra['paymentId']),
+    invoice_id: Number(h.id.replace(/\D/g, '')),
+    payment_status: h.status === 'paid' ? 'finished' : h.status === 'partial' ? 'partially_paid' : h.status === 'declined' ? 'expired' : 'waiting',
+    pay_address: 'TMockAddress',
+    price_amount: h.amount,
+    price_currency: 'usd',
+    pay_amount: h.amount,
+    actually_paid: h.status === 'partial' ? h.amount / 2 : h.status === 'paid' ? h.amount : 0,
+    pay_currency: 'usdttrc20',
+    order_id: h.ref,
+    order_description: 'Whizperz',
+    outcome_amount: h.amount,
+    outcome_currency: 'usdttrc20',
+  };
+}
 
 const stk = new Map<string, StkRequest>();
 const orders = new Map<string, PesapalOrder>();
@@ -213,6 +264,120 @@ const server = createServer(async (req, res) => {
       back.searchParams.set('OrderNotificationType', 'CALLBACKURL');
       res.writeHead(303, { Location: back.toString() });
       return res.end();
+    }
+
+    /* ---- iPOS Pay (iPOSpays) ---- */
+    if (path === '/ipos/auth/v1/authenticate-token' && req.method === 'POST') {
+      if (req.headers['apikey'] !== E2E_IPOS.apiKey || req.headers['secretkey'] !== E2E_IPOS.secretKey) {
+        return send(res, 401, { errors: [{ code: 'AUTH_ERR_004', message: 'Invalid Credentials, Please Contact Support Team.' }] });
+      }
+      return send(res, 200, { responseCode: '00', responseMessage: 'Success', token: 'mock-ipos-token' });
+    }
+    if (path === '/ipos/payment/api/v3/external-payment-transaction' && req.method === 'POST') {
+      if (req.headers['token'] !== 'mock-ipos-token') return send(res, 401, { message: 'Invalid token' });
+      const b = await readBody(req);
+      const auth = b['merchantAuthentication'] as Record<string, string>;
+      const tr = b['transactionRequest'] as Record<string, string>;
+      const n = b['notificationOption'] as Record<string, string>;
+      if (auth['merchantId'] !== E2E_IPOS.tpn) return send(res, 400, { errors: [{ field: 'merchantAuthentication.merchantId', message: 'Invalid merchant id' }] });
+      const id = `ipos-${++counter}`;
+      hosted.set(id, { id, ref: auth['transactionReferenceId']!, amount: Number(tr['amount']), currency: 'USD', returnUrl: n['returnUrl']!, notifyUrl: n['postAPI']!, status: 'pending', extra: { authHeader: n['authHeader'] ?? '' } });
+      return send(res, 200, { message: 'Url generated Successful', information: `http://127.0.0.1:${PORT}/ipos/pay?t=${id}` });
+    }
+    if (path === '/ipos/pay') {
+      const h = hosted.get(url.searchParams.get('t') ?? '');
+      if (!h) return send(res, 404, 'Unknown payment', 'text/plain');
+      return send(res, 200, page('Mock iPOSpays checkout', `<p>USD ${(h.amount / 100).toFixed(2)}</p><form method="post" action="/ipos/pay/done?t=${h.id}&ok=1"><button>Pay now</button></form><form method="post" action="/ipos/pay/done?t=${h.id}&ok=0"><button>Decline</button></form>`), 'text/html');
+    }
+    if (path === '/ipos/pay/done' && req.method === 'POST') {
+      const h = hosted.get(url.searchParams.get('t') ?? '');
+      if (!h) return send(res, 404, 'Unknown payment', 'text/plain');
+      h.status = url.searchParams.get('ok') === '1' ? 'paid' : 'declined';
+      await postRaw(h.notifyUrl, JSON.stringify({ iposHPResponse: { transactionReferenceId: h.ref, responseCode: h.status === 'paid' ? 200 : 400 } }), { Authorization: h.extra['authHeader'] ?? '' });
+      return redirect(res, h.returnUrl);
+    }
+    if (path === '/ipos/api/v1/queryPaymentStatus') {
+      if (req.headers.authorization !== 'mock-ipos-token') return send(res, 401, { message: 'Unauthorized' });
+      const h = [...hosted.values()].find((x) => x.id.startsWith('ipos-') && x.ref === url.searchParams.get('transactionReferenceId') && url.searchParams.get('tpn') === E2E_IPOS.tpn);
+      if (!h) return send(res, 404, { message: 'Transaction not found' });
+      return send(res, 200, {
+        iposHPResponse: {
+          responseCode: h.status === 'paid' ? 200 : h.status === 'declined' ? 400 : 102,
+          responseMessage: h.status === 'paid' ? 'Successful' : h.status === 'declined' ? 'Declined' : 'Pending',
+          transactionReferenceId: h.ref,
+          transactionId: `IPOS${h.id.replace(/\D/g, '')}`,
+          transactionType: 1,
+          cardType: 'VISA',
+          cardLast4Digit: '4242',
+          amount: String(h.amount),
+          totalAmount: String(h.amount),
+        },
+      });
+    }
+
+    /* ---- Unipesa ---- */
+    if (path === '/unipesa/hpp' && req.method === 'GET') {
+      const fields = Object.fromEntries(url.searchParams) as Record<string, string>;
+      if (fields['merchant_id'] !== E2E_UNIPESA.merchantId || !verifyUnipesa(fields, E2E_UNIPESA.secretKey)) {
+        return send(res, 400, page('Unipesa error', '<p>Invalid signature</p>'), 'text/html');
+      }
+      const id = `uni-${++counter}`;
+      hosted.set(id, { id, ref: fields['order_id']!, amount: Number(fields['amount']), currency: fields['currency']!, returnUrl: fields['return_url']!, notifyUrl: fields['callback_url']!, status: 'pending', extra: {} });
+      return send(res, 200, page('Mock Unipesa checkout', `<p>${fields['currency']} ${fields['amount']}</p><form method="post" action="/unipesa/hpp/done?t=${id}&ok=1"><button>Pay now</button></form><form method="post" action="/unipesa/hpp/done?t=${id}&ok=0"><button>Cancel</button></form>`), 'text/html');
+    }
+    if (path === '/unipesa/hpp/done' && req.method === 'POST') {
+      const h = hosted.get(url.searchParams.get('t') ?? '');
+      if (!h) return send(res, 404, 'Unknown payment', 'text/plain');
+      h.status = url.searchParams.get('ok') === '1' ? 'paid' : 'declined';
+      const cb: Record<string, unknown> = {
+        merchant_id: E2E_UNIPESA.merchantId,
+        operation_type: 17,
+        customer_id: '254712345678',
+        amount: h.amount.toFixed(2),
+        order_id: h.ref,
+        transaction_id: `T${h.id.replace(/\D/g, '')}`,
+        transaction_ref: `UNI${h.id.replace(/\D/g, '')}`,
+        status: h.status === 'paid' ? 2 : 4,
+        provider_id: 12,
+        result: { code: 0, message: 'Success' },
+        provider_result: { code: 0, message: h.status === 'paid' ? 'Success' : 'Cancelled by customer' },
+      };
+      cb['signature'] = unipesaSign(cb, E2E_UNIPESA.secretKey);
+      await postRaw(h.notifyUrl, JSON.stringify(cb), {});
+      return redirect(res, h.returnUrl);
+    }
+
+    /* ---- NOWPayments (crypto) ---- */
+    if (path === '/nowpayments/v1/invoice' && req.method === 'POST') {
+      if (req.headers['x-api-key'] !== E2E_NOWPAYMENTS.apiKey) return send(res, 403, { status: false, statusCode: 403, code: 'INVALID_API_KEY', message: 'Invalid api key' });
+      const b = await readBody(req);
+      const id = `np-${++counter}`;
+      hosted.set(id, { id, ref: String(b['order_id']), amount: Number(b['price_amount']), currency: String(b['price_currency']).toUpperCase(), returnUrl: String(b['success_url']), notifyUrl: String(b['ipn_callback_url']), status: 'pending', extra: { paymentId: String(5000 + counter) } });
+      return send(res, 200, { id: id.replace(/\D/g, ''), order_id: b['order_id'], price_amount: String(b['price_amount']), price_currency: b['price_currency'], invoice_url: `http://127.0.0.1:${PORT}/nowpayments/pay?t=${id}` });
+    }
+    if (path === '/nowpayments/pay') {
+      const h = hosted.get(url.searchParams.get('t') ?? '');
+      if (!h) return send(res, 404, 'Unknown invoice', 'text/plain');
+      return send(res, 200, page('Mock NOWPayments invoice', `<p>USD ${h.amount}</p><form method="post" action="/nowpayments/pay/done?t=${h.id}&how=full"><button>Send USDT</button></form><form method="post" action="/nowpayments/pay/done?t=${h.id}&how=partial"><button>Send half</button></form>`), 'text/html');
+    }
+    if (path === '/nowpayments/pay/done' && req.method === 'POST') {
+      const h = hosted.get(url.searchParams.get('t') ?? '');
+      if (!h) return send(res, 404, 'Unknown invoice', 'text/plain');
+      h.status = url.searchParams.get('how') === 'partial' ? 'partial' : 'paid';
+      const body = nowPayment(h);
+      // Confirmations arrive a moment after the guest is back on the site, like a real blockchain.
+      setTimeout(() => void postRaw(h.notifyUrl, JSON.stringify(body), { 'x-nowpayments-sig': nowPaymentsSignature(body, E2E_NOWPAYMENTS.ipnSecret) }), 800);
+      return redirect(res, h.returnUrl);
+    }
+    if (path.startsWith('/nowpayments/v1/payment/')) {
+      if (req.headers['x-api-key'] !== E2E_NOWPAYMENTS.apiKey) return send(res, 403, { message: 'Invalid api key' });
+      const h = [...hosted.values()].find((x) => x.extra['paymentId'] === path.split('/').pop());
+      if (!h) return send(res, 404, { message: 'Payment not found' });
+      return send(res, 200, nowPayment(h));
+    }
+    if (path === '/nowpayments/v1/merchant/coins') {
+      if (req.headers['x-api-key'] !== E2E_NOWPAYMENTS.apiKey) return send(res, 403, { message: 'Invalid api key' });
+      return send(res, 200, { selectedCurrencies: ['usdttrc20', 'btc', 'eth'] });
     }
 
     /* ---- Mail the site sent (read by the tests) ---- */

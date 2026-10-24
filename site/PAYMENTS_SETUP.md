@@ -2,6 +2,8 @@
 
 Everything below is done in the admin, under **Settings**. You don't need to edit any files.
 
+Guests can pay by **M-Pesa**, **Pesapal** (cards, Airtel Money and more), **iPOS Pay** (cards in US dollars), **Unipesa** (mobile money and cards in the region) and **crypto** (NOWPayments). Each method appears on the site once its keys are saved. The full account-opening guide for every provider is the "Whizperz payment setup guide" document.
+
 ## How a payment works
 
 **Booked online.** On a journey's page the guest picks a date, the number of adults and children, a deposit or the full amount, and M-Pesa or card. The site works out the price from the journey's prices in **Packages**, saves the booking as a quote and starts the payment. After a deposit is paid, open the quote and press **Create balance pay link**; the guest gets a link for the rest.
@@ -52,6 +54,6 @@ Payment providers send results to your site, so it must be online at a public **
 - Admin logins are rate-limited (5 wrong passwords locks that login for 15 minutes). Sessions end after 12 hours or when the password changes. Forms from other websites are refused.
 
 ## Not built yet
-- iPOS Pay, Unipesa and crypto.
+- Automatic refunds for iPOS Pay, Unipesa and crypto (refund in their dashboards, then record it on the quote).
 - Automatic reminders for unpaid balances (create the balance link from the quote page).
 - Automatic retries of failed refunds (retry from the quote page).
