@@ -1,14 +1,26 @@
+# Installed packages and build output (rebuilt every time)
 node_modules/
 dist/
 .astro/
+.vercel/
+
+# Secrets: never commit these (.env.example is the safe template)
 .env
 .env.*
 !.env.example
-.DS_Store
-data/
+
+# The site's saved data: journeys, quotes, users, settings, session key.
+# The leading slash matters: only the top-level data folder, not src/data (FAQ text, which must be committed).
+/data/
+
+# Test output
 test-results/
 playwright-report/
 .e2e-data/
 
+# cPanel upload (made by "Make cPanel upload.bat")
 cpanel-upload/
 whizperz-cpanel.tar.gz
+
+.DS_Store
+Thumbs.db

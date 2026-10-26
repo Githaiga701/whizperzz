@@ -1,5 +1,7 @@
-.env
-.env.*.local
-!.env.example
+# The website lives in site/ (see site/.gitignore for its own rules).
 node_modules/
-dist/
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

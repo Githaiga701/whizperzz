@@ -38,7 +38,8 @@ let override: PaymentDeps | undefined;
 
 function getBase() {
   if (!base) {
-    const dataDir = process.env['DATA_DIR']?.trim() || './data';
+    // On Vercel only /tmp is writable, and it is wiped often: fine for a preview, not for real bookings.
+    const dataDir = process.env['DATA_DIR']?.trim() || (process.env['VERCEL'] ? '/tmp/whizperz-data' : './data');
     base = {
       dataDir,
       store: new QuoteStore(filePersistence(dataDir)),

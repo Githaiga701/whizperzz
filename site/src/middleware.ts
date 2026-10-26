@@ -12,6 +12,11 @@ const OPEN_ADMIN_PAGES = ['/admin/login', '/admin/setup'];
  * refuses form posts from other websites, and keeps admin pages out of caches and search engines.
  */
 export const onRequest = defineMiddleware(async (ctx, next) => {
+  // Pages built ahead of time have no visitor, so there are no request headers to read.
+  if (ctx.isPrerendered) {
+    ctx.locals.ip = 'unknown';
+    return next();
+  }
   ctx.locals.ip = clientIp(ctx);
   const path = ctx.url.pathname;
   const adminPage = path === '/admin' || path.startsWith('/admin/');

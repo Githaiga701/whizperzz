@@ -42,6 +42,8 @@ If everyone forgets their password, open `/admin/setup/?recover=1` on the server
 
 **On your cPanel hosting (tours.whizperzpizza.co.ke):** follow [DEPLOY_CPANEL.md](DEPLOY_CPANEL.md). Double-click **Make cPanel upload.bat** to build the file you upload.
 
+**On Vercel (previews only):** the Vercel project's Root Directory must be `site`. The build picks the Vercel adapter by itself. Vercel can't keep files, so journeys, quotes, users and settings saved there are wiped every few minutes. Use it to show people the design, not to take real bookings or payments.
+
 **On other hosts:**
 
 The site needs a host that runs Node.js 22.23.4 or newer: a VPS, Railway, Render or Fly.io. The host runs `npm install`, `npm run build:site` and `npm start`.

@@ -23,8 +23,8 @@ cpSync(join(root, 'passenger.cjs'), join(out, 'passenger.cjs'));
 if (existsSync(join(root, 'package-lock.json'))) cpSync(join(root, 'package-lock.json'), join(out, 'package-lock.json'));
 
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-// Only what the running site needs; fonts are already built into the pages.
-const runtime = Object.fromEntries(Object.entries(pkg.dependencies).filter(([name]) => !name.startsWith('@fontsource/')));
+// Only what the running site needs; fonts are already built into the pages, and the Vercel adapter is only used on Vercel.
+const runtime = Object.fromEntries(Object.entries(pkg.dependencies).filter(([name]) => !name.startsWith('@fontsource/') && name !== '@astrojs/vercel'));
 writeFileSync(
   join(out, 'package.json'),
   JSON.stringify({ name: pkg.name, version: pkg.version, private: true, type: 'module', main: 'passenger.cjs', scripts: { start: 'node passenger.cjs' }, dependencies: runtime, engines: pkg.engines }, null, 2),
