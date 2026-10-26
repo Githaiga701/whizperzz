@@ -1,4 +1,5 @@
 ---
+import SocialLinks from '@/components/SocialLinks.astro';
 import Base from '@/layouts/Base.astro';
 import PageHero from '@/components/PageHero.astro';
 import EnquiryForm from '@/components/EnquiryForm.astro';
@@ -20,6 +21,8 @@ const c = site.contact;
           {c.email && <li><span>Email</span><a href={`mailto:${c.email}`}>{c.email}</a></li>}
           <li><span>Visit</span><strong>{c.address}</strong></li>
         </ul>
+        <h2 class="contact-follow">Follow along</h2>
+        <SocialLinks tone="light" />
         <p style="margin-top:28px">Prefer to draw it? <a class="link" href="/plan/">Sketch your route on the map</a></p>
       </div>
       <EnquiryForm />

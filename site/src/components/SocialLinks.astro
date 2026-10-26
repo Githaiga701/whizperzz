@@ -1,0 +1,34 @@
+---
+import { socialLinks } from '@/lib/server/social';
+
+/**
+ * Buttons for Whizperz's social accounts. A button with no saved link shows as "soon" and isn't clickable,
+ * so visitors never land on a broken or wrong page. Links are added in Admin → Settings → Social media.
+ */
+interface Props {
+  tone?: 'dark' | 'light';
+  class?: string;
+}
+
+const { tone = 'dark', class: className } = Astro.props;
+const links = socialLinks();
+---
+
+<ul class:list={['social', `social--${tone}`, className]} aria-label="Whizperz on social media">
+  {
+    links.map((l) => (
+      <li>
+        {l.url ? (
+          <a class="social-btn" href={l.url} target="_blank" rel="noopener noreferrer me" data-social={l.key}>
+            {l.label}
+          </a>
+        ) : (
+          <span class="social-btn is-soon" data-social={l.key} title={`${l.label}: coming soon`}>
+            {l.label}
+            <small>soon</small>
+          </span>
+        )}
+      </li>
+    ))
+  }
+</ul>

@@ -1,5 +1,6 @@
 ---
 import Logo from './Logo.astro';
+import SocialLinks from './SocialLinks.astro';
 import { site } from '@/config/site';
 import { prettyPhone } from '@/lib/enquiry';
 ---
@@ -13,6 +14,7 @@ import { prettyPhone } from '@/lib/enquiry';
           <span class="brand-name notranslate" translate="no">whizperz<small style="color:var(--on-dark-muted)">Tours & Safaris</small></span>
         </a>
         <p class="footer-motto">{site.motto}</p>
+        <SocialLinks class="footer-social" />
       </div>
       <div>
         <h2>Explore</h2>

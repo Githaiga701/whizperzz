@@ -31,6 +31,29 @@ const { pins, mode = 'static', route = [], highlight = [], label, uid = 'map' } 
 
 const placed = pins.map((p) => ({ ...p, ...project(p.lon, p.lat) }));
 const byId = new Map(placed.map((p) => [p.id, p]));
+
+/** Tap area for each pin: the dot plus its name, split halfway with any close neighbour so two never overlap. */
+const hitBox = (p: (typeof placed)[number]) => {
+  const w = 30 + p.name.length * 12.5;
+  const x = p.labelSide === 'left' ? p.x + 15 - w : p.x - 15;
+  return { x, w };
+};
+const hits = new Map(
+  placed.map((p) => {
+    const { x, w } = hitBox(p);
+    let top = p.y - 22;
+    let bottom = p.y + 22;
+    for (const q of placed) {
+      if (q === p || Math.abs(q.y - p.y) >= 44) continue;
+      const o = hitBox(q);
+      if (o.x >= x + w || x >= o.x + o.w) continue;
+      const mid = (p.y + q.y) / 2;
+      if (q.y < p.y) top = Math.max(top, mid);
+      else bottom = Math.min(bottom, mid);
+    }
+    return [p.id, { x, y: top, w, h: bottom - top }];
+  }),
+);
 const routePoints = route.map((id) => byId.get(id)).filter((p) => p !== undefined);
 const outbound = routePoints.length ? routePath([NAIROBI, ...routePoints]) : '';
 const last = routePoints.at(-1);
@@ -102,8 +125,10 @@ const role = mode === 'static' ? 'img' : 'group';
       const lx = p.labelSide === 'left' ? p.x - 15 : p.x + 15;
       const order = route.indexOf(p.id);
       const on = highlight.includes(p.id) || order >= 0;
+      const hit = hits.get(p.id)!;
       const inner = (
         <>
+          <rect class="pin-hit" x={hit.x} y={hit.y} width={hit.w} height={hit.h} />
           <circle class="pin-dot" cx={p.x} cy={p.y} r="7" />
           <text class="pin-order" x={p.x} y={p.y + 4} text-anchor="middle" data-order>
             {mode === 'interactive' ? '' : order >= 0 && route.length > 1 ? order + 1 : ''}

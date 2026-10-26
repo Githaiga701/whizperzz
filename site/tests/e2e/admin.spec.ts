@@ -188,6 +188,38 @@ test('settings: iPOS Pay, Unipesa and crypto are on, and their test buttons work
   await expect(flash()).toContainText('List IP addresses');
 });
 
+test('social media links: “soon” until saved, then live in the footer and on Contact', async () => {
+  const pub = await context.newPage();
+  await pub.goto('/contact/');
+  for (const name of ['Instagram', 'TikTok', 'Facebook', 'X (Twitter)']) {
+    await expect(pub.locator('footer .social-btn', { hasText: name })).toContainText('soon');
+  }
+  await expect(pub.locator('footer a.social-btn')).toHaveCount(0);
+
+  await page.goto('/admin/settings/');
+  const social = page.locator('#social');
+  await social.getByLabel('Instagram').fill('https://evil.example/instagram');
+  await social.getByRole('button', { name: 'Save social links' }).click();
+  await expect(flash()).toContainText('doesn’t look like an Instagram link');
+  await page.locator('#social').getByLabel('Instagram').fill('https://www.instagram.com/whizperztours');
+  await page.locator('#social').getByRole('button', { name: 'Save social links' }).click();
+  await expect(flash()).toContainText('Social links saved');
+
+  await pub.reload();
+  const ig = pub.locator('footer a.social-btn', { hasText: 'Instagram' });
+  await expect(ig).toHaveAttribute('href', 'https://www.instagram.com/whizperztours');
+  await expect(ig).toHaveAttribute('target', '_blank');
+  await expect(pub.locator('main a.social-btn', { hasText: 'Instagram' })).toBeVisible();
+  await expect(pub.locator('footer .social-btn', { hasText: 'TikTok' })).toContainText('soon');
+
+  // Emptying the box puts it back to “soon”.
+  await page.locator('#social').getByLabel('Instagram').fill('');
+  await page.locator('#social').getByRole('button', { name: 'Save social links' }).click();
+  await pub.reload();
+  await expect(pub.locator('footer a.social-btn')).toHaveCount(0);
+  await pub.close();
+});
+
 test('create a quote and email the pay link', async ({ request }) => {
   mpesaRef = await newQuote({ name: 'Amina Odhiambo', amount: '64,500', email: 'amina@example.com', phone: '0722 000 111', description: 'Into the open, 2 adults, March' });
   await expect(flash()).toContainText(`Quote ${mpesaRef} created. Pay link emailed to amina@example.com`);
@@ -584,6 +616,19 @@ test('security: other websites, logged-out visitors, lockouts and headers', asyn
   await p.goto('/admin/login/?next=https://evil.example');
   await expect(p.locator('form')).toBeVisible();
   await other.close();
+});
+
+test('every admin screen fits a phone without sideways scrolling', async () => {
+  const phone = await context.newPage();
+  await phone.setViewportSize({ width: 360, height: 740 });
+  await phone.goto('/admin/packages/');
+  const editHref = await phone.locator('a[href^="/admin/packages/"]:not([href$="/new/"])').filter({ hasNotText: 'packages' }).first().getAttribute('href');
+  for (const path of ['/admin/', '/admin/settings/', '/admin/quotes/new/', '/admin/packages/', '/admin/packages/new/', editHref!, '/admin/users/']) {
+    await phone.goto(path);
+    const extra = await phone.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(extra, `${path} is wider than the phone`).toBeLessThanOrEqual(0);
+  }
+  await phone.close();
 });
 
 test('change your own password, log out and back in', async () => {

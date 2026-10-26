@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { docsFor, type DocStore } from '@/lib/storage/docs';
+import { readJsonSync, writeJsonSync } from '@/lib/files';
 
 /**
  * Settings entered in the admin screen. Saved in DATA_DIR/settings.json.
@@ -59,6 +59,12 @@ export interface Settings {
     statusUrl?: string;
     callbackSecret?: string;
   };
+  social?: {
+    instagram?: string;
+    twitter?: string;
+    tiktok?: string;
+    facebook?: string;
+  };
   crypto?: {
     env?: 'sandbox' | 'production';
     apiKey?: string;
@@ -76,7 +82,7 @@ export interface Settings {
   };
 }
 
-export type Section = 'mpesa' | 'pesapal' | 'email' | 'booking' | 'ipos' | 'unipesa' | 'crypto';
+export type Section = 'mpesa' | 'pesapal' | 'email' | 'booking' | 'ipos' | 'unipesa' | 'crypto' | 'social';
 
 /** Sections whose notify address contains a secret we create. */
 const CALLBACK_SECTIONS: readonly Section[] = ['mpesa', 'pesapal', 'ipos', 'unipesa', 'crypto'];
@@ -90,6 +96,7 @@ export const SECRET_FIELDS: Record<Section, readonly string[]> = {
   ipos: ['authToken', 'secretKey', 'callbackSecret'],
   unipesa: ['secretKey', 'callbackSecret'],
   crypto: ['apiKey', 'ipnSecret', 'callbackSecret'],
+  social: [],
 };
 
 /** How each setting maps to an environment variable. */
@@ -145,6 +152,12 @@ export const ENV_MAP = {
     statusUrl: 'UNIPESA_STATUS_URL',
     callbackSecret: 'UNIPESA_CALLBACK_SECRET',
   },
+  social: {
+    instagram: 'SOCIAL_INSTAGRAM',
+    twitter: 'SOCIAL_TWITTER',
+    tiktok: 'SOCIAL_TIKTOK',
+    facebook: 'SOCIAL_FACEBOOK',
+  },
   crypto: {
     env: 'NOWPAYMENTS_ENV',
     apiKey: 'NOWPAYMENTS_API_KEY',
@@ -169,7 +182,7 @@ export function settingsToEnv(s: Settings): Record<string, string> {
   };
   put(ENV_MAP.siteUrl, s.siteUrl);
   put(ENV_MAP.paymentsMode, s.paymentsMode);
-  for (const section of ['mpesa', 'pesapal', 'email', 'booking', 'ipos', 'unipesa', 'crypto'] as const) {
+  for (const section of ['mpesa', 'pesapal', 'email', 'booking', 'ipos', 'unipesa', 'crypto', 'social'] as const) {
     const values = (s[section] ?? {}) as Record<string, unknown>;
     for (const [field, key] of Object.entries(ENV_MAP[section])) put(key, values[field]);
   }
@@ -211,24 +224,41 @@ function validateField(field: string, v: string): void {
     throw new Error('List IP addresses separated by commas, like 41.90.1.10, 41.90.2.0/24.');
   }
   if (['paymentUrl', 'apiUrl', 'authUrl', 'hppUrl', 'statusUrl'].includes(field) && !/^https:\/\/[^\s]+$/.test(v)) throw new Error('Addresses must start with https://.');
+  const social: Record<string, [RegExp, string]> = {
+    instagram: [/^(www\.)?instagram\.com$/, 'an Instagram link, like https://www.instagram.com/whizperztours'],
+    twitter: [/^(www\.)?(x|twitter)\.com$/, 'an X (Twitter) link, like https://x.com/whizperztours'],
+    tiktok: [/^(www\.)?tiktok\.com$/, 'a TikTok link, like https://www.tiktok.com/@whizperztours'],
+    facebook: [/^(www\.|m\.)?(facebook|fb)\.com$/, 'a Facebook link, like https://www.facebook.com/whizperztours'],
+  };
+  if (field in social) {
+    const [host, example] = social[field]!;
+    let url: URL | undefined;
+    try {
+      url = new URL(v);
+    } catch {
+      url = undefined;
+    }
+    if (!url || url.protocol !== 'https:' || !host.test(url.hostname) || url.pathname.length < 2) throw new Error(`That doesn’t look like ${example}.`);
+  }
   if (v.length > 4000) throw new Error('That value is too long.');
 }
 
 export class SettingsStore {
-  private readonly docs: DocStore;
+  private cache: Settings | undefined;
   readonly file: string;
 
   constructor(dataDir: string) {
     this.file = join(dataDir, 'settings.json');
-    this.docs = docsFor(dataDir);
   }
 
   read(): Settings {
-    return this.docs.read<Settings>('settings.json') ?? {};
+    if (!this.cache) this.cache = readJsonSync<Settings>(this.file) ?? {};
+    return structuredClone(this.cache);
   }
 
   private write(next: Settings): Settings {
-    this.docs.write('settings.json', next, { private: true });
+    writeJsonSync(this.file, next, { private: true });
+    this.cache = next;
     return structuredClone(next);
   }
 

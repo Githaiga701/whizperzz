@@ -6,7 +6,6 @@ import { ENV_MAP, fieldSource, type Section } from '@/lib/settings/store';
 import { ensurePesapalIpn, getRuntime, reloadRuntime, log } from '@/lib/server/payments';
 import { pesapalReady } from '@/lib/payments/config';
 import { testEmail } from '@/lib/email/templates';
-import { explainMpesaError, mpesaCallbackProblem } from '@/lib/payments/service';
 
 export const prerender = false;
 
@@ -44,6 +43,11 @@ if (Astro.request.method === 'POST') {
         setFlash(Astro.cookies, 'ok', 'Booking rules saved. Journey pages use them straight away.');
         anchor = '#booking';
         break;
+      case 'save_social':
+        rt.settings.saveSection('social', formObject(form, ['instagram', 'tiktok', 'facebook', 'twitter']));
+        setFlash(Astro.cookies, 'ok', 'Social links saved. They show in the footer and on the Contact page now.');
+        anchor = '#social';
+        break;
       case 'save_ipos':
         rt.settings.saveSection('ipos', formObject(form, ['env', 'tpn', 'authToken', 'apiKey', 'secretKey', 'paymentUrl', 'apiUrl', 'authUrl']));
         setFlash(Astro.cookies, 'ok', 'iPOS Pay settings saved. Use “Test connection” to check them.');
@@ -74,8 +78,6 @@ if (Astro.request.method === 'POST') {
         const d = getRuntime().deps.daraja;
         if (!d) throw new Error('Fill in and save the M-Pesa keys first.');
         await d.ping();
-        const callbackIssue = mpesaCallbackProblem(getRuntime().deps.config);
-        if (callbackIssue) throw new Error(`Your keys work, but guests can't pay yet: ${explainMpesaError(callbackIssue)}`);
         setFlash(Astro.cookies, 'ok', 'M-Pesa connection works. Safaricom accepted your consumer key and secret.');
         anchor = '#mpesa';
         break;
@@ -194,7 +196,7 @@ const status = [
   }
 
   <nav class="settings-nav" aria-label="Settings sections">
-    <a href="#general">Site</a><a href="#booking">Booking</a><a href="#mpesa">M-Pesa</a><a href="#pesapal">Pesapal</a><a href="#ipos">iPOS Pay</a><a href="#unipesa">Unipesa</a><a href="#crypto">Crypto</a><a href="#email">Email</a>
+    <a href="#general">Site</a><a href="#booking">Booking</a><a href="#mpesa">M-Pesa</a><a href="#pesapal">Pesapal</a><a href="#ipos">iPOS Pay</a><a href="#unipesa">Unipesa</a><a href="#crypto">Crypto</a><a href="#email">Email</a><a href="#social">Social media</a>
   </nav>
 
   <div class="panel" style="margin-bottom:20px">
@@ -281,7 +283,6 @@ const status = [
       <form method="post"><input type="hidden" name="action" value="test_mpesa" /><button class="button button--small button--ghost" type="submit" disabled={!config.mpesa}>Test connection</button></form>
     </div>
     {config.mpesa && <p class="hint">Payment results go to: <span class="code">{config.mpesa.callbackUrl.replace(config.mpesa.callbackSecret, '••••')}</span></p>}
-    {config.mpesa && mpesaCallbackProblem(config) && <p class="hint hint--warn" role="alert"><strong>Guests can’t pay by M-Pesa yet.</strong> {explainMpesaError(mpesaCallbackProblem(config)!)}</p>}
   </section>
 
   <section class="panel" id="pesapal" aria-labelledby="pesapal-h">
@@ -450,6 +451,22 @@ const status = [
       <input type="hidden" name="action" value="test_email" />
       <input name="to" type="email" placeholder="Send a test to…" aria-label="Test email address" value={rt.email?.notifyTo ?? ''} />
       <button class="button button--small button--ghost" type="submit" disabled={!rt.email}>Send test email</button>
+    </form>
+  </section>
+  <section class="panel" id="social" aria-labelledby="social-h">
+    <h2 id="social-h">Social media</h2>
+    <p class="hint">Paste the full link to each profile once the account exists. Until then its button shows as “soon” and can’t be clicked. Leave a box empty to go back to “soon”.</p>
+    <form method="post" class="admin-form">
+      <input type="hidden" name="action" value="save_social" />
+      <div class="two">
+        <SettingField name="instagram" label="Instagram" placeholder="https://www.instagram.com/yourname" value={s.social?.instagram} source={src('social', 'instagram')} envValue={envOf('social', 'instagram')} />
+        <SettingField name="tiktok" label="TikTok" placeholder="https://www.tiktok.com/@yourname" value={s.social?.tiktok} source={src('social', 'tiktok')} envValue={envOf('social', 'tiktok')} />
+      </div>
+      <div class="two">
+        <SettingField name="facebook" label="Facebook" placeholder="https://www.facebook.com/yourpage" value={s.social?.facebook} source={src('social', 'facebook')} envValue={envOf('social', 'facebook')} />
+        <SettingField name="twitter" label="X (Twitter)" placeholder="https://x.com/yourname" value={s.social?.twitter} source={src('social', 'twitter')} envValue={envOf('social', 'twitter')} />
+      </div>
+      <div class="actions"><button class="button button--small" type="submit">Save social links</button></div>
     </form>
   </section>
 </Admin>

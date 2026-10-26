@@ -29,3 +29,19 @@ const mail = site.contact.email ? `mailto:${site.contact.email}?subject=${encode
     )}
   </nav>
 )}
+
+<script>
+  // On phones the on-screen keyboard leaves little room, so tuck the floating buttons away while a field is being typed in.
+  const dock = document.querySelector<HTMLElement>('.contact-dock');
+  if (dock) {
+    const typing = (el: EventTarget | null) =>
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement ||
+      (el instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit', 'range', 'hidden'].includes(el.type));
+    const small = window.matchMedia('(max-width: 760px)');
+    // Checked a moment later so moving from one field to the next doesn't make the buttons flicker.
+    const update = () => setTimeout(() => dock.classList.toggle('is-tucked', small.matches && typing(document.activeElement)), 0);
+    document.addEventListener('focusin', update);
+    document.addEventListener('focusout', update);
+  }
+</script>
