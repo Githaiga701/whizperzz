@@ -25,6 +25,9 @@ export interface Settings {
     consumerKey?: string;
     consumerSecret?: string;
     ipnId?: string;
+    /** The address ipnId was registered for. */
+    ipnUrl?: string;
+    callbackIps?: string;
     callbackSecret?: string;
   };
   booking?: {
@@ -45,6 +48,10 @@ export interface Settings {
   };
   unipesa?: {
     merchantId?: string;
+    publicId?: string;
+    payType?: string;
+    currency?: string;
+    callbackIps?: string;
     secretKey?: string;
     providerId?: string;
     country?: string;
@@ -105,6 +112,8 @@ export const ENV_MAP = {
     consumerKey: 'PESAPAL_CONSUMER_KEY',
     consumerSecret: 'PESAPAL_CONSUMER_SECRET',
     ipnId: 'PESAPAL_IPN_ID',
+    ipnUrl: 'PESAPAL_IPN_URL',
+    callbackIps: 'PESAPAL_CALLBACK_IPS',
     callbackSecret: 'PESAPAL_CALLBACK_SECRET',
   },
   booking: {
@@ -125,6 +134,10 @@ export const ENV_MAP = {
   },
   unipesa: {
     merchantId: 'UNIPESA_MERCHANT_ID',
+    publicId: 'UNIPESA_PUBLIC_ID',
+    payType: 'UNIPESA_PAY_TYPE',
+    currency: 'UNIPESA_CURRENCY',
+    callbackIps: 'UNIPESA_CALLBACK_IPS',
     secretKey: 'UNIPESA_SECRET_KEY',
     providerId: 'UNIPESA_PROVIDER_ID',
     country: 'UNIPESA_COUNTRY',
@@ -165,7 +178,13 @@ export function settingsToEnv(s: Settings): Record<string, string> {
 
 /** Settings from the admin screen win; the environment fills any gaps. */
 export function mergeEnv(env: Record<string, string | undefined>, s: Settings): Record<string, string | undefined> {
-  return { ...env, ...settingsToEnv(s) };
+  const merged: Record<string, string | undefined> = { ...env, ...settingsToEnv(s) };
+  // Pesapal keys saved here belong with an IPN registered here; never pair them with one from the environment.
+  if (s.pesapal?.consumerKey && !s.pesapal.ipnId) {
+    delete merged['PESAPAL_IPN_ID'];
+    delete merged['PESAPAL_IPN_URL'];
+  }
+  return merged;
 }
 
 export function newSecret(): string {
@@ -184,6 +203,13 @@ function validateField(field: string, v: string): void {
   if (field === 'tpn' && !/^[A-Za-z0-9]{6,20}$/.test(v)) throw new Error('The TPN is the 10 to 12 digit terminal number from iPOSpays.');
   if (field === 'providerId' && !/^\d{1,6}$/.test(v)) throw new Error('The Unipesa provider ID is a number, like 12.');
   if (field === 'country' && !/^[A-Za-z]{2}$/.test(v)) throw new Error('Use the two-letter country code, like KE.');
+  if (field === 'merchantId' && !/^[\w-]{4,64}$/.test(v)) throw new Error('The merchant ID can only contain letters, numbers, dashes and underscores.');
+  if (field === 'publicId' && !/^[\w-]{4,64}$/.test(v)) throw new Error('The public ID can only contain letters, numbers, dashes and underscores.');
+  if (field === 'payType' && !/^[a-z_]{2,20}$/i.test(v)) throw new Error('The payment type is a single word, like card.');
+  if (field === 'currency' && !/^[A-Za-z]{3}$/.test(v)) throw new Error('Use the three-letter currency code, like KES.');
+  if (field === 'callbackIps' && !v.split(/[\s,]+/).filter(Boolean).every((ip) => /^(\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?|[0-9a-f:]+)$/i.test(ip))) {
+    throw new Error('List IP addresses separated by commas, like 41.90.1.10, 41.90.2.0/24.');
+  }
   if (['paymentUrl', 'apiUrl', 'authUrl', 'hppUrl', 'statusUrl'].includes(field) && !/^https:\/\/[^\s]+$/.test(v)) throw new Error('Addresses must start with https://.');
   if (v.length > 4000) throw new Error('That value is too long.');
 }
@@ -229,7 +255,7 @@ export class SettingsStore {
     const before = JSON.stringify(current);
 
     for (const field of allowed) {
-      if (field === 'callbackSecret' || field === 'ipnId') continue;
+      if (field === 'callbackSecret' || field === 'ipnId' || field === 'ipnUrl') continue;
       if (!(field in input)) continue;
       const v = (input[field] ?? '').trim();
       if (v !== '') validateField(field, v);
@@ -250,15 +276,18 @@ export class SettingsStore {
     // A new Pesapal account or environment needs its IPN registered again.
     if (section === 'pesapal') {
       const old = JSON.parse(before) as Record<string, string | undefined>;
-      if (old['consumerKey'] !== current['consumerKey'] || (old['env'] ?? '') !== (current['env'] ?? '')) delete current['ipnId'];
+      if (old['consumerKey'] !== current['consumerKey'] || (old['env'] ?? '') !== (current['env'] ?? '')) {
+        delete current['ipnId'];
+        delete current['ipnUrl'];
+      }
     }
     (s as Record<string, unknown>)[section] = current;
     return this.write(s);
   }
 
-  setPesapalIpnId(ipnId: string): Settings {
+  setPesapalIpnId(ipnId: string, ipnUrl?: string): Settings {
     const s = this.read();
-    s.pesapal = { ...(s.pesapal ?? {}), ipnId };
+    s.pesapal = { ...(s.pesapal ?? {}), ipnId, ...(ipnUrl ? { ipnUrl } : {}) };
     return this.write(s);
   }
 

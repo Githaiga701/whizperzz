@@ -1,3 +1,4 @@
+import { behindProxy } from '@/lib/server/client-ip';
 import type { AstroCookies } from 'astro';
 import { createSessionValue, SESSION_COOKIE, SESSION_HOURS } from './session';
 import { passwordVersion, type AdminUser } from './users';
@@ -55,6 +56,8 @@ export function sameOrigin(request: Request): boolean {
 
 /** A request coming straight from this computer, not through a proxy. */
 export function isLocalRequest(request: Request, clientAddress: string): boolean {
+  // Behind cPanel's proxy every request comes from 127.0.0.1, so "local" can't be trusted there.
+  if (behindProxy()) return false;
   if (request.headers.get('x-forwarded-for') || request.headers.get('forwarded')) return false;
   return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(clientAddress);
 }

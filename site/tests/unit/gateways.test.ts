@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { loadPaymentConfig } from '@/lib/payments/config';
 import { kesToUsd, type Gateway, type GatewayResult } from '@/lib/payments/gateways';
 import { createIpos, iposAmount, mapIposStatus } from '@/lib/payments/gateways/ipos';
-import { createUnipesa, mapUnipesa, unipesaSign, unipesaSignatureString, verifyUnipesa } from '@/lib/payments/gateways/unipesa';
+import { createUnipesa, ipAllowed, mapUnipesa, unipesaSign, unipesaSignatureString, verifyUnipesa } from '@/lib/payments/gateways/unipesa';
 import { createNowPayments, mapNowPayment, nowPaymentsSignature, verifyNowPayments } from '@/lib/payments/gateways/nowpayments';
 import { createQuote, handleGatewayNotice, getQuoteStatus, refundPayment, startGateway, viewQuote } from '@/lib/payments/service';
 import { FULL_ENV, makeDeps } from '../helpers';
@@ -192,24 +192,24 @@ describe('iPOS Pay', () => {
     const { impl, calls } = fakeFetch({
       'POST https://auth.ipospays.tech/v1/authenticate-token': () => ({ body: { responseCode: '00', token: 'tok-1' } }),
       'POST https://payment.ipospays.tech/api/v3/external-payment-transaction': () => ({ body: { message: 'Url generated Successful', information: 'https://payment.ipospays.tech/api/v1/externalPay?t=abc' } }),
-      'GET https://api.ipospays.tech/v1/queryPaymentStatus': () => ({ body: { iposHPResponse: { responseCode: 200, responseMessage: 'Successful', transactionReferenceId: 'WZ-A-I1', amount: '65385' } } }),
+      'GET https://api.ipospays.tech/v1/queryPaymentStatus': () => ({ body: { iposHPResponse: { responseCode: 200, responseMessage: 'Successful', transactionReferenceId: 'WZAI1', amount: '65385' } } }),
     });
     const g = createIpos(loadPaymentConfig(GATEWAY_ENV).ipos!, impl);
-    const r = await g.startCheckout({ merchantRef: 'WZ-A-I1', amount: 653.85, description: 'Trip', returnUrl: 'https://whizperz.test/pay/WZ-A/?return=ipos', email: 'j@x.co', phone: '254712345678', name: 'Jane' });
+    const r = await g.startCheckout({ merchantRef: 'WZAI1', amount: 653.85, description: 'Trip', returnUrl: 'https://whizperz.test/pay/WZ-A/?return=ipos', email: 'j@x.co', phone: '254712345678', name: 'Jane' });
     expect(r.redirectUrl).toBe('https://payment.ipospays.tech/api/v1/externalPay?t=abc');
     const auth = new Headers(calls[0]!.init.headers);
     expect([auth.get('apiKey'), auth.get('secretKey')]).toEqual(['ik', 'is']);
     const hpp = calls[1]!;
     expect(new Headers(hpp.init.headers).get('token')).toBe('tok-1');
     expect(JSON.parse(String(hpp.init.body))).toMatchObject({
-      merchantAuthentication: { merchantId: '139322815010', transactionReferenceId: 'WZ-A-I1' },
+      merchantAuthentication: { merchantId: 139322815010, transactionReferenceId: 'WZAI1' },
       transactionRequest: { transactionType: 1, amount: '65385' },
       notificationOption: { postAPI: 'https://whizperz.test/api/callbacks/ipos/ipos-cb', returnUrl: 'https://whizperz.test/pay/WZ-A/?return=ipos' },
       preferences: { customerEmail: 'j@x.co', customerMobile: '+254712345678' },
     });
-    expect(await g.checkStatus({ merchantRef: 'WZ-A-I1', providerRef: 'WZ-A-I1', amount: 653.85 })).toMatchObject({ outcome: 'paid', amount: 653.85 });
+    expect(await g.checkStatus({ merchantRef: 'WZAI1', providerRef: 'WZAI1', amount: 653.85 })).toMatchObject({ outcome: 'paid', amount: 653.85 });
     expect(new Headers(calls[2]!.init.headers).get('Authorization')).toBe('tok-1');
-    expect(calls[2]!.url).toContain('tpn=139322815010&transactionReferenceId=WZ-A-I1');
+    expect(calls[2]!.url).toContain('tpn=139322815010&transactionReferenceId=WZAI1');
     // The token is reused.
     expect(calls.filter((c) => c.url.includes('authenticate-token'))).toHaveLength(1);
   });
@@ -224,8 +224,8 @@ describe('iPOS Pay', () => {
 
   it('never trusts the notification body, only which payment it is about', () => {
     const g = createIpos(loadPaymentConfig(GATEWAY_ENV).ipos!);
-    const n = g.readNotice({ headers: new Headers(), raw: '', body: { iposHPResponse: { transactionReferenceId: 'WZ-A-I1', responseCode: 200 } } });
-    expect(n).toEqual({ merchantRef: 'WZ-A-I1' });
+    const n = g.readNotice({ headers: new Headers(), raw: '', body: { iposHPResponse: { transactionReferenceId: 'WZAI1', responseCode: 200 } } });
+    expect(n).toEqual({ merchantRef: 'WZAI1' });
     expect(g.readNotice({ headers: new Headers(), raw: '', body: {} })).toBeNull();
   });
 });
@@ -367,5 +367,146 @@ describe('paying through a hosted gateway', () => {
   it('offers every method that is switched on', async () => {
     const { deps, quote } = await setup();
     expect(viewQuote(deps, (await deps.store.get(quote.ref))!).methods).toEqual({ mpesa: true, card: true, ipos: true, unipesa: false, crypto: false });
+  });
+});
+
+/* ---------- Unipesa: details that matter for security ---------- */
+
+describe('Unipesa callbacks (hardening)', () => {
+  const cfg = () => loadPaymentConfig({ ...GATEWAY_ENV, UNIPESA_CALLBACK_IPS: '41.90.1.10, 196.201.214.0/24' }).unipesa!;
+  const headers = new Headers();
+
+  function signedRaw(fields: Record<string, unknown>, rawBodyFor: (sig: string) => string, signOver: Record<string, unknown> = fields) {
+    const sig = unipesaSign(signOver, 'uni-secret');
+    const raw = rawBodyFor(sig);
+    return { raw, body: JSON.parse(raw) as Record<string, unknown> };
+  }
+
+  it('checks the signature over numbers exactly as Unipesa wrote them ("100.00", not 100)', () => {
+    const g = createUnipesa(cfg());
+    const asSent = { merchant_id: 'merchant-1', amount: '100.00', order_id: 'WZX1U1', status: 2 };
+    const { raw, body } = signedRaw(asSent, (sig) => `{"merchant_id":"merchant-1","amount":100.00,"order_id":"WZX1U1","status":2,"signature":"${sig}"}`);
+    expect(body['amount']).toBe(100);
+    expect(g.readNotice({ headers, raw, body, ip: '41.90.1.10' })).toMatchObject({ merchantRef: 'WZX1U1', verified: { outcome: 'paid', amount: 100 } });
+  });
+
+  it('only accepts results from Unipesa’s IP addresses when a list is set', () => {
+    const g = createUnipesa(cfg());
+    const f = { merchant_id: 'merchant-1', order_id: 'WZX1U1', amount: '10.00', status: 2 };
+    const body = { ...f, signature: unipesaSign(f, 'uni-secret') };
+    const raw = JSON.stringify(body);
+    expect(g.readNotice({ headers, raw, body, ip: '41.90.1.10' })).not.toBeNull();
+    expect(g.readNotice({ headers, raw, body, ip: '196.201.214.77' })).not.toBeNull();
+    expect(g.readNotice({ headers, raw, body, ip: '196.201.215.1' })).toBeNull();
+    expect(g.readNotice({ headers, raw, body, ip: '8.8.8.8' })).toBeNull();
+    expect(g.readNotice({ headers, raw, body })).toBeNull();
+    // Without a list, any sender with a valid signature is accepted.
+    expect(createUnipesa(loadPaymentConfig(GATEWAY_ENV).unipesa!).readNotice({ headers, raw, body, ip: '8.8.8.8' })).not.toBeNull();
+  });
+
+  it('ignores signed results that aren’t payments to us (e.g. payouts)', () => {
+    const g = createUnipesa(loadPaymentConfig(GATEWAY_ENV).unipesa!);
+    const payout = { merchant_id: 'merchant-1', operation_type: 16, order_id: 'WZX1U1', amount: '10.00', status: 2 };
+    const body = { ...payout, signature: unipesaSign(payout, 'uni-secret') };
+    expect(g.readNotice({ headers, raw: JSON.stringify(body), body })).toBeNull();
+    const payment = { ...payout, operation_type: 17 };
+    const ok = { ...payment, signature: unipesaSign(payment, 'uni-secret') };
+    expect(g.readNotice({ headers, raw: JSON.stringify(ok), body: ok })).not.toBeNull();
+  });
+
+  it('reads failures and the payment method', () => {
+    expect(mapUnipesa({ status: 2, provider_id: 12, transaction_ref: 'QWE123' })).toMatchObject({ outcome: 'paid', method: 'Safaricom M-Pesa', receipt: 'QWE123' });
+    expect(mapUnipesa({ status: 3, result: { code: 0, message: 'Success' }, provider_result: { code: 1, message: '' } }).reason).toBe('The payment did not go through. Please try again.');
+    expect(mapUnipesa({ status: 6 }).outcome).toBe('pending');
+  });
+
+  it('fills the public ID into the status address and rejects replies about other orders', async () => {
+    const replies: Record<string, unknown>[] = [{ order_id: 'WZX1U1', status: 1 }, { order_id: 'SOMETHINGELSE', status: 2 }];
+    const { impl, calls } = fakeFetch({ 'POST https://pay.unipesa.example/api/pub-77/status': () => ({ body: replies.shift() }) });
+    const g = createUnipesa(loadPaymentConfig({ ...GATEWAY_ENV, UNIPESA_PUBLIC_ID: 'pub-77', UNIPESA_STATUS_URL: 'https://pay.unipesa.example/api/{public_id}/status' }).unipesa!, impl);
+    expect(await g.checkStatus({ merchantRef: 'WZX1U1', providerRef: 'WZX1U1' })).toMatchObject({ outcome: 'pending' });
+    await expect(g.checkStatus({ merchantRef: 'WZX1U1', providerRef: 'WZX1U1' })).rejects.toThrow('different order');
+    expect(JSON.parse(String(calls[0]!.init.body))).toMatchObject({ merchant_id: 'merchant-1', order_id: 'WZX1U1' });
+  });
+
+  it('“Check settings” treats a signed “unknown order” reply as success, and bad keys as failure', async () => {
+    const answer = { status: 404, body: { result: { code: 404, message: 'Order not found' } } };
+    const { impl } = fakeFetch({ 'POST https://pay.unipesa.example/status': () => answer });
+    const g = createUnipesa(loadPaymentConfig({ ...GATEWAY_ENV, UNIPESA_STATUS_URL: 'https://pay.unipesa.example/status' }).unipesa!, impl);
+    await expect(g.ping()).resolves.toBeUndefined();
+    answer.status = 401;
+    await expect(g.ping()).rejects.toThrow();
+  });
+
+  it('uses the settings for currency, provider and payment type in the signed link', async () => {
+    const g = createUnipesa(loadPaymentConfig({ ...GATEWAY_ENV, UNIPESA_PROVIDER_ID: '14', UNIPESA_PAY_TYPE: 'card', UNIPESA_CURRENCY: 'kes' }).unipesa!);
+    const { redirectUrl } = await g.startCheckout({ merchantRef: 'WZA1U1', amount: 1500, description: 'x', returnUrl: 'https://whizperz.test/pay/WZ-A/?return=unipesa', email: undefined, phone: undefined, name: 'Jane' });
+    const fields = Object.fromEntries(new URL(redirectUrl).searchParams);
+    expect(fields).toMatchObject({ provider_id: '14', type: 'card', currency: 'KES', amount: '1500.00', email: '' });
+    expect(Object.keys(fields).at(-1)).toBe('signature');
+    expect(verifyUnipesa(fields, 'uni-secret')).toBe(true);
+    await expect(g.startCheckout({ merchantRef: 'WZA1U2', amount: 0, description: 'x', returnUrl: 'https://x', email: undefined, phone: undefined, name: 'J' })).rejects.toThrow('more than zero');
+  });
+});
+
+describe('IP allow-list', () => {
+  it('matches exact addresses and IPv4 ranges', () => {
+    expect(ipAllowed('41.90.1.10', [])).toBe(true);
+    expect(ipAllowed('41.90.1.10', ['41.90.1.10'])).toBe(true);
+    expect(ipAllowed('::ffff:41.90.1.10', ['41.90.1.10'])).toBe(true);
+    expect(ipAllowed('41.90.1.200', ['41.90.1.0/24'])).toBe(true);
+    expect(ipAllowed('41.90.2.1', ['41.90.1.0/24'])).toBe(false);
+    expect(ipAllowed('10.0.0.1', ['0.0.0.0/0'])).toBe(true);
+    expect(ipAllowed(undefined, ['41.90.1.10'])).toBe(false);
+    expect(ipAllowed('2c0f:fe38::1', ['2c0f:fe38::1'])).toBe(true);
+  });
+});
+
+describe('iPOS Pay (spec details)', () => {
+  it('builds references and names iPOSpays accepts', async () => {
+    const { iposReference, iposName, iposAuthHeader } = await import('@/lib/payments/gateways/ipos');
+    expect(iposReference('WZ-ABC123', 1)).toBe('WZABC123I1');
+    expect(iposReference('WZ-ABC123', 12)).toMatch(/^[A-Za-z0-9]{1,20}$/);
+    expect(iposName('Jane O’Brien-Wanjiku Kamau 3rd')).toBe('Jane OBrienWanjiku Kamau');
+    expect(iposName('Zoë')).toBe('Zoe');
+    expect(iposAuthHeader('secret')).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  it('sends an all-inclusive amount, a one-day link and the v1 endpoint with a portal token', async () => {
+    const { impl, calls } = fakeFetch({
+      'POST https://payment.ipospays.tech/api/v1/external-payment-transaction': () => ({ body: { information: 'https://payment.ipospays.tech/api/v1/externalPay?t=x' } }),
+    });
+    const g = createIpos(loadPaymentConfig({ ...GATEWAY_ENV, IPOS_AUTH_TOKEN: 'ecom-token' }).ipos!, impl);
+    await g.startCheckout({ merchantRef: 'WZAI1', amount: 10, description: 'Trip', returnUrl: 'https://whizperz.test/pay/WZ-A/', email: undefined, phone: '0712', name: 'J' });
+    const sent = JSON.parse(String(calls[0]!.init.body));
+    expect(new Headers(calls[0]!.init.headers).get('token')).toBe('ecom-token');
+    expect(sent.transactionRequest).toEqual({ transactionType: 1, amount: '1000', calculateFee: false, tipsInputPrompt: false, calculateTax: false, expiry: 1 });
+    expect(sent.notificationOption.authHeader).toMatch(/^[0-9a-f]{40}$/);
+    expect(sent.preferences).not.toHaveProperty('customerMobile');
+    expect(sent.preferences).not.toHaveProperty('customerEmail');
+  });
+
+  it('refuses unsafe or wrong replies', async () => {
+    const replies: unknown[] = [{ information: 'http://evil.example/pay' }, { errors: [{ field: 'merchantAuthentication.merchantId', message: 'Invalid merchant id' }] }];
+    const { impl } = fakeFetch({
+      'POST https://payment.ipospays.tech/api/v1/external-payment-transaction': () => ({ body: replies.shift() }),
+      'GET https://api.ipospays.tech/v1/queryPaymentStatus': () => ({ body: { iposHPResponse: { responseCode: 200, responseMessage: 'Successful', transactionReferenceId: 'OTHER1', amount: '1000' } } }),
+    });
+    const g = createIpos(loadPaymentConfig({ ...GATEWAY_ENV, IPOS_AUTH_TOKEN: 't' }).ipos!, impl);
+    const input = { merchantRef: 'WZAI1', amount: 10, description: 'x', returnUrl: 'https://x', email: undefined, phone: undefined, name: 'J' };
+    await expect(g.startCheckout(input)).rejects.toThrow('didn’t open a payment page');
+    await expect(g.startCheckout(input)).rejects.toThrow('merchantAuthentication.merchantId: Invalid merchant id');
+    await expect(g.startCheckout({ ...input, merchantRef: 'WZ-A-I1' })).rejects.toThrow('Invalid iPOS Pay reference');
+    await expect(g.checkStatus({ merchantRef: 'WZAI1', providerRef: 'WZAI1', amount: 10 })).rejects.toThrow('different payment');
+  });
+
+  it('maps every documented response code; a card check is not a payment', () => {
+    const r = (code: number, extra: Record<string, unknown> = {}) => mapIposStatus({ iposHPResponse: { responseCode: code, responseMessage: 'x', ...extra } });
+    expect(r(200)?.outcome).toBe('paid');
+    expect(r(200, { transactionType: 2 })?.outcome).toBe('failed');
+    expect(r(400, { errResponseMessage: 'Insufficient funds' })?.reason).toContain('Insufficient funds');
+    expect(r(401)?.reason).toBe('You cancelled the card payment.');
+    expect(r(402)?.outcome).toBe('failed');
+    expect(r(102)?.outcome).toBe('pending');
   });
 });

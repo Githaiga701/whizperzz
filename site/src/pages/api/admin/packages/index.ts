@@ -8,9 +8,9 @@ import { handle, json, rateLimit, readJson, requireAdmin } from '@/lib/server/pa
 export const prerender = false;
 
 /** All journeys, drafts included. */
-export const GET: APIRoute = ({ request, clientAddress, locals }) =>
+export const GET: APIRoute = ({ request, locals }) =>
   handle(async () => {
-    rateLimit(`admin:${clientAddress}`, 30, 60_000);
+    rateLimit(`admin:${locals.ip}`, 30, 60_000);
     requireAdmin(request, locals);
     return json(200, { packages: await getPackageStore().list() });
   });
@@ -19,9 +19,9 @@ export const GET: APIRoute = ({ request, clientAddress, locals }) =>
  * Adds a journey. Body: { id?, name, route: string[], styles: string[], photoSrc, photoAlt?, summary, whisper?,
  * itinerary: {title, note, span}[], order?, published?, adultKes?, childKes?, minGuests?, maxGuests? }.
  */
-export const POST: APIRoute = ({ request, clientAddress, locals }) =>
+export const POST: APIRoute = ({ request, locals }) =>
   handle(async () => {
-    rateLimit(`admin:${clientAddress}`, 30, 60_000);
+    rateLimit(`admin:${locals.ip}`, 30, 60_000);
     requireAdmin(request, locals);
     const ids = (await getDestinations()).map((d) => d.id);
     try {

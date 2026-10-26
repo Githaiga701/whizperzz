@@ -21,7 +21,7 @@ function call(handler: Handler | undefined, opts: { method?: string; url?: strin
   if (opts.raw !== undefined) init.body = opts.raw;
   else if (opts.body !== undefined) init.body = JSON.stringify(opts.body);
   const request = new Request(url, init);
-  const ctx = { request, url, params: opts.params ?? {}, clientAddress: opts.ip ?? '10.0.0.1', locals: {} } as unknown as APIContext;
+  const ctx = { request, url, params: opts.params ?? {}, clientAddress: opts.ip ?? '10.0.0.1', locals: { ip: opts.ip ?? '10.0.0.1' } } as unknown as APIContext;
   return handler!(ctx);
 }
 

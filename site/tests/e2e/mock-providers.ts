@@ -89,6 +89,7 @@ function nowPayment(h: HostedPayment) {
   };
 }
 
+const ipns: { url: string; ipn_id: string; created_date: string }[] = [];
 const stk = new Map<string, StkRequest>();
 const orders = new Map<string, PesapalOrder>();
 let counter = 0;
@@ -200,8 +201,12 @@ const server = createServer(async (req, res) => {
     }
 
     /* ---- Pesapal ---- */
+    if (path === '/pesapalv3/api/URLSetup/GetIpnList') {
+      return send(res, 200, ipns);
+    }
     if (path === '/pesapalv3/api/URLSetup/RegisterIPN') {
       const b = await readBody(req);
+      ipns.push({ url: String(b['url']), ipn_id: 'mock-ipn-registered', created_date: new Date().toISOString() });
       return send(res, 200, { url: b['url'], ipn_id: 'mock-ipn-registered', ipn_notification_type_description: 'POST', ipn_status_description: 'Active', error: null, status: '200' });
     }
     if (path === '/pesapalv3/api/Transactions/RefundRequest') {
@@ -277,9 +282,10 @@ const server = createServer(async (req, res) => {
       if (req.headers['token'] !== 'mock-ipos-token') return send(res, 401, { message: 'Invalid token' });
       const b = await readBody(req);
       const auth = b['merchantAuthentication'] as Record<string, string>;
+      if (!/^[A-Za-z0-9]{1,20}$/.test(String(auth['transactionReferenceId']))) return send(res, 400, { errors: [{ field: 'merchantAuthentication.transactionReferenceId', message: 'Invalid reference' }] });
       const tr = b['transactionRequest'] as Record<string, string>;
       const n = b['notificationOption'] as Record<string, string>;
-      if (auth['merchantId'] !== E2E_IPOS.tpn) return send(res, 400, { errors: [{ field: 'merchantAuthentication.merchantId', message: 'Invalid merchant id' }] });
+      if (String(auth['merchantId']) !== E2E_IPOS.tpn) return send(res, 400, { errors: [{ field: 'merchantAuthentication.merchantId', message: 'Invalid merchant id' }] });
       const id = `ipos-${++counter}`;
       hosted.set(id, { id, ref: auth['transactionReferenceId']!, amount: Number(tr['amount']), currency: 'USD', returnUrl: n['returnUrl']!, notifyUrl: n['postAPI']!, status: 'pending', extra: { authHeader: n['authHeader'] ?? '' } });
       return send(res, 200, { message: 'Url generated Successful', information: `http://127.0.0.1:${PORT}/ipos/pay?t=${id}` });

@@ -5,9 +5,9 @@ import { getPaymentDeps, handle, json, rateLimit, readJson } from '@/lib/server/
 export const prerender = false;
 
 /** Sends an M-Pesa prompt to the guest's phone. Body: { ref, phone }. The amount always comes from the stored quote. */
-export const POST: APIRoute = ({ request, clientAddress }) =>
+export const POST: APIRoute = ({ request, locals }) =>
   handle(async () => {
-    rateLimit(`pay:${clientAddress}`, 20, 60_000);
+    rateLimit(`pay:${locals.ip}`, 20, 60_000);
     const body = await readJson(request);
     const result = await startMpesa(getPaymentDeps(), body['ref'], body['phone']);
     return json(202, result);

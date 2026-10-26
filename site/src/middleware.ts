@@ -3,6 +3,7 @@ import { readSessionValue, SESSION_COOKIE } from '@/lib/admin/session';
 import { passwordVersion } from '@/lib/admin/users';
 import { sameOrigin } from '@/lib/admin/web';
 import { getRuntime } from '@/lib/server/payments';
+import { clientIp } from '@/lib/server/client-ip';
 
 const OPEN_ADMIN_PAGES = ['/admin/login', '/admin/setup'];
 
@@ -11,6 +12,7 @@ const OPEN_ADMIN_PAGES = ['/admin/login', '/admin/setup'];
  * refuses form posts from other websites, and keeps admin pages out of caches and search engines.
  */
 export const onRequest = defineMiddleware(async (ctx, next) => {
+  ctx.locals.ip = clientIp(ctx);
   const path = ctx.url.pathname;
   const adminPage = path === '/admin' || path.startsWith('/admin/');
   const adminApi = path.startsWith('/api/admin/');

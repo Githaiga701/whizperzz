@@ -11,8 +11,14 @@ function sameSecret(a: string | undefined, b: string | undefined): boolean {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
-async function readBody(request: Request): Promise<{ raw: string; body: Record<string, unknown> }> {
+/** Results are small; anything bigger is not from a payment company. */
+const MAX_BODY_BYTES = 64 * 1024;
+
+async function readBody(request: Request): Promise<{ raw: string; body: Record<string, unknown> } | null> {
+  const declared = Number(request.headers.get('content-length') ?? 0);
+  if (declared > MAX_BODY_BYTES) return null;
   const raw = await request.text();
+  if (Buffer.byteLength(raw) > MAX_BODY_BYTES) return null;
   if (!raw) return { raw, body: {} };
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -28,18 +34,20 @@ async function readBody(request: Request): Promise<{ raw: string; body: Record<s
  * The secret in the address keeps strangers out; the payment itself is still confirmed with the gateway.
  */
 export function gatewayCallback(id: GatewayId): { POST: APIRoute; GET: APIRoute } {
-  const run: APIRoute = async ({ params, request, url, clientAddress }) => {
+  const run: APIRoute = async ({ params, request, url, locals }) => {
     try {
-      rateLimit(`callback:${clientAddress}`, 120, 60_000);
+      rateLimit(`callback:${locals.ip}`, 120, 60_000);
     } catch {
       return json(429, { error: 'rate_limited' });
     }
     const deps = getPaymentDeps();
     const cfg = id === 'ipos' ? deps.config.ipos : id === 'unipesa' ? deps.config.unipesa : deps.config.crypto;
     if (!cfg || !sameSecret(params['secret'], cfg.callbackSecret)) return json(404, { error: 'not_found' });
-    const { raw, body } = request.method === 'GET' ? { raw: '', body: Object.fromEntries(url.searchParams) as Record<string, unknown> } : await readBody(request);
+    const read = request.method === 'GET' ? { raw: '', body: Object.fromEntries(url.searchParams) as Record<string, unknown> } : await readBody(request);
+    if (!read) return json(413, { error: 'too_large' });
+    const { raw, body } = read;
     try {
-      const outcome = await handleGatewayNotice(deps, id, { headers: request.headers, body, raw });
+      const outcome = await handleGatewayNotice(deps, id, { headers: request.headers, body, raw, ip: locals.ip });
       log('info', `${id} callback handled`, { outcome });
       // Always 200 once it's ours, so the gateway stops retrying; bad signatures are logged and ignored.
       return json(200, { status: 'ok' });

@@ -40,6 +40,10 @@ If everyone forgets their password, open `/admin/setup/?recover=1` on the server
 
 ## Putting it online
 
+**On your cPanel hosting (tours.whizperzpizza.co.ke):** follow [DEPLOY_CPANEL.md](DEPLOY_CPANEL.md). Double-click **Make cPanel upload.bat** to build the file you upload.
+
+**On other hosts:**
+
 The site needs a host that runs Node.js 22.23.4 or newer: a VPS, Railway, Render or Fly.io. The host runs `npm install`, `npm run build:site` and `npm start`.
 
 1. Set these in the host's dashboard:

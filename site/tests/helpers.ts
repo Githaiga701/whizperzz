@@ -115,6 +115,7 @@ export function fakeDaraja() {
 export function fakePesapal() {
   return {
     registerIpn: vi.fn<Pesapal['registerIpn']>(async (url: string) => ({ url, ipn_id: 'ipn-123' })),
+    ipnList: vi.fn<Pesapal['ipnList']>(async () => []),
     submitOrder: vi.fn<Pesapal['submitOrder']>(async (input) => ({
       order_tracking_id: `track-${input.merchantReference}`,
       merchant_reference: input.merchantReference,

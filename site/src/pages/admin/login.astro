@@ -18,7 +18,7 @@ if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
   username = str(form, 'username').trim().toLowerCase();
   const password = str(form, 'password');
-  const key = `${Astro.clientAddress}|${username}`;
+  const key = `${Astro.locals.ip}|${username}`;
   const locked = loginLockedFor(key);
   if (locked) {
     error = `Too many wrong passwords. Try again in ${locked} minute${locked === 1 ? '' : 's'}.`;

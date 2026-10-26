@@ -38,6 +38,10 @@ const envSchema = z.object({
   /** The ipn_id returned when the IPN URL was registered (npm run pesapal:register-ipn). */
   PESAPAL_IPN_ID: blank,
   PESAPAL_CALLBACK_SECRET: blank,
+  /** The address the saved PESAPAL_IPN_ID was registered for. If the site address changes, the IPN is registered again. */
+  PESAPAL_IPN_URL: blank,
+  /** Optional allow-list of the IP addresses Pesapal sends notifications from. */
+  PESAPAL_CALLBACK_IPS: blank,
   PESAPAL_BASE_URL: blank,
 
   /** Shillings per US dollar. iPOS Pay and crypto charge in dollars, converted at this rate. */
@@ -58,6 +62,13 @@ const envSchema = z.object({
   IPOS_AUTH_URL: blank,
 
   UNIPESA_MERCHANT_ID: blank,
+  /** The "merchant public ID" some Unipesa addresses contain. Defaults to the merchant ID. */
+  UNIPESA_PUBLIC_ID: blank,
+  /** Optional: the "type" Unipesa's payment page should open with (e.g. card). */
+  UNIPESA_PAY_TYPE: blank,
+  UNIPESA_CURRENCY: blank,
+  /** Optional allow-list of the IP addresses Unipesa sends results from (comma separated; IPv4 ranges like 41.1.2.0/24 allowed). */
+  UNIPESA_CALLBACK_IPS: blank,
   UNIPESA_SECRET_KEY: blank,
   UNIPESA_CALLBACK_SECRET: blank,
   /** Which payment option Unipesa's page opens with (their provider id). Empty lets Unipesa decide. */
@@ -96,6 +107,7 @@ export interface PesapalConfig {
   ipnId: string | undefined;
   ipnUrl: string;
   callbackSecret: string;
+  callbackIps: string[];
 }
 
 export interface IposConfig {
@@ -113,10 +125,15 @@ export interface IposConfig {
 export interface UnipesaConfig {
   hppUrl: string;
   merchantId: string;
+  publicId: string | undefined;
   secretKey: string;
   providerId: string | undefined;
+  payType: string | undefined;
   country: string;
+  currency: string;
+  /** Status address; may contain {merchant_id} and {public_id}. */
   statusUrl: string | undefined;
+  callbackIps: string[];
   callbackSecret: string;
   notifyUrl: string;
 }
@@ -152,7 +169,7 @@ export const MPESA_URLS = {
 
 export const IPOS_URLS = {
   sandbox: { payment: 'https://payment.ipospays.tech', api: 'https://api.ipospays.tech', auth: 'https://auth.ipospays.tech' },
-  // Dejavoo confirms the live addresses when it issues live keys; they can be changed in Settings.
+  // From iPOSpays' published docs (HPP, queryPaymentStatus and token API). Can be overridden in Settings.
   production: { payment: 'https://payment.ipospays.com', api: 'https://api.ipospays.com', auth: 'https://auth.ipospays.com' },
 } as const;
 
@@ -223,16 +240,20 @@ export function loadPaymentConfig(raw: Record<string, string | undefined>): Paym
   ]);
   if (pesapalMissing.length === 0) {
     const secret = env.PESAPAL_CALLBACK_SECRET!;
+    const ipnUrl = `${siteUrl}/api/callbacks/pesapal/${encodeURIComponent(secret)}`;
+    // An IPN id registered for an older site address would send results to the wrong place.
+    const stale = Boolean(env.PESAPAL_IPN_URL && env.PESAPAL_IPN_URL !== ipnUrl);
     pesapal = {
       baseUrl: env.PESAPAL_BASE_URL ?? PESAPAL_URLS[env.PESAPAL_ENV ?? mode],
       consumerKey: env.PESAPAL_CONSUMER_KEY!,
       consumerSecret: env.PESAPAL_CONSUMER_SECRET!,
-      ipnId: env.PESAPAL_IPN_ID,
+      ipnId: stale ? undefined : env.PESAPAL_IPN_ID,
       callbackSecret: secret,
-      ipnUrl: `${siteUrl}/api/callbacks/pesapal/${encodeURIComponent(secret)}`,
+      ipnUrl,
+      callbackIps: (env.PESAPAL_CALLBACK_IPS ?? '').split(/[\s,]+/).filter(Boolean),
     };
-    if (!env.PESAPAL_IPN_ID) {
-      warnings.push('Pesapal checkout is off until PESAPAL_IPN_ID is set. Run: npm run pesapal:register-ipn');
+    if (!pesapal.ipnId) {
+      warnings.push(stale ? 'Pesapal: the site address changed, so the IPN will be registered again.' : 'Pesapal checkout is off until the IPN is registered (Settings → Pesapal does this automatically).');
     }
   } else {
     warnings.push(`Pesapal is off. Missing: ${pesapalMissing.join(', ')}.`);
@@ -276,10 +297,14 @@ export function loadPaymentConfig(raw: Record<string, string | undefined>): Paym
     unipesa = {
       hppUrl: (env.UNIPESA_HPP_URL ?? UNIPESA_HPP_URL).replace(/\/+$/, ''),
       merchantId: env.UNIPESA_MERCHANT_ID!,
+      publicId: env.UNIPESA_PUBLIC_ID,
       secretKey: env.UNIPESA_SECRET_KEY!,
       providerId: env.UNIPESA_PROVIDER_ID,
+      payType: env.UNIPESA_PAY_TYPE,
       country: (env.UNIPESA_COUNTRY ?? 'KE').toUpperCase(),
+      currency: (env.UNIPESA_CURRENCY ?? 'KES').toUpperCase(),
       statusUrl: env.UNIPESA_STATUS_URL,
+      callbackIps: (env.UNIPESA_CALLBACK_IPS ?? '').split(/[\s,]+/).filter(Boolean),
       callbackSecret: env.UNIPESA_CALLBACK_SECRET!,
       notifyUrl: callback('unipesa', env.UNIPESA_CALLBACK_SECRET!),
     };

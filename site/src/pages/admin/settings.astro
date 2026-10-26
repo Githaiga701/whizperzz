@@ -3,7 +3,7 @@ import Admin from '@/layouts/Admin.astro';
 import SettingField from '@/components/admin/SettingField.astro';
 import { formObject, setFlash, str, takeFlash } from '@/lib/admin/web';
 import { ENV_MAP, fieldSource, type Section } from '@/lib/settings/store';
-import { getRuntime, reloadRuntime, log } from '@/lib/server/payments';
+import { ensurePesapalIpn, getRuntime, reloadRuntime, log } from '@/lib/server/payments';
 import { pesapalReady } from '@/lib/payments/config';
 import { testEmail } from '@/lib/email/templates';
 
@@ -29,8 +29,8 @@ if (Astro.request.method === 'POST') {
         anchor = '#mpesa';
         break;
       case 'save_pesapal':
-        rt.settings.saveSection('pesapal', formObject(form, ['env', 'consumerKey', 'consumerSecret']));
-        setFlash(Astro.cookies, 'ok', 'Pesapal settings saved. Test the connection, then register the IPN.');
+        rt.settings.saveSection('pesapal', formObject(form, ['env', 'consumerKey', 'consumerSecret', 'callbackIps']));
+        setFlash(Astro.cookies, 'ok', 'Pesapal settings saved.');
         anchor = '#pesapal';
         break;
       case 'save_email':
@@ -49,7 +49,7 @@ if (Astro.request.method === 'POST') {
         anchor = '#ipos';
         break;
       case 'save_unipesa':
-        rt.settings.saveSection('unipesa', formObject(form, ['merchantId', 'secretKey', 'providerId', 'country', 'hppUrl', 'statusUrl']));
+        rt.settings.saveSection('unipesa', formObject(form, ['merchantId', 'publicId', 'secretKey', 'providerId', 'payType', 'country', 'currency', 'hppUrl', 'statusUrl', 'callbackIps']));
         setFlash(Astro.cookies, 'ok', 'Unipesa settings saved. Send the notify address below to Unipesa.');
         anchor = '#unipesa';
         break;
@@ -89,7 +89,7 @@ if (Astro.request.method === 'POST') {
         const cur = getRuntime();
         if (!cur.deps.pesapal || !cur.deps.config.pesapal) throw new Error('Fill in and save the Pesapal keys first.');
         const res = await cur.deps.pesapal.registerIpn(cur.deps.config.pesapal.ipnUrl);
-        cur.settings.setPesapalIpnId(res.ipn_id);
+        cur.settings.setPesapalIpnId(res.ipn_id, cur.deps.config.pesapal.ipnUrl);
         setFlash(Astro.cookies, 'ok', 'Pesapal IPN registered. Card payments are switched on.');
         anchor = '#pesapal';
         break;
@@ -114,6 +114,21 @@ if (Astro.request.method === 'POST') {
     anchor = anchor || `#${action.replace(/^(save|test)_/, '').replace('register_ipn', 'pesapal')}`;
   }
   reloadRuntime();
+  // Pesapal needs to know where to send results; do it for the person whenever keys or the address change.
+  if (['save_general', 'save_pesapal', 'test_pesapal'].includes(action)) {
+    try {
+      const r = await ensurePesapalIpn();
+      if (r === 'registered' || r === 'reused') {
+        const prev = takeFlash(Astro.cookies);
+        setFlash(Astro.cookies, prev?.kind ?? 'ok', `${prev?.text ?? 'Saved.'} Pesapal now sends payment results to this site; card payments are on.`);
+      }
+    } catch (err) {
+      log('warn', 'Pesapal IPN registration failed', { error: (err as Error).message });
+      if (action !== 'save_general') {
+        setFlash(Astro.cookies, 'error', `Saved, but Pesapal didn’t accept the result address yet: ${(err as Error).message}. Check the keys and press “Register IPN”.`);
+      }
+    }
+  }
   return Astro.redirect(here + anchor);
 }
 
@@ -139,10 +154,16 @@ const status = [
   {
     name: 'Card (Pesapal)',
     ok: pesapalReady(config),
-    text: pesapalReady(config) ? `On (${config.pesapal!.baseUrl.includes('cybqa') ? 'sandbox' : 'live'})` : config.pesapal ? 'Almost: press “Register IPN”' : 'Off: add your Pesapal keys below',
+    text: pesapalReady(config) ? `On (${config.pesapal!.baseUrl.includes('cybqa') ? 'sandbox' : 'live'})` : config.pesapal ? 'Almost: press “Test connection” to finish setup' : 'Off: add your Pesapal keys below',
   },
   { name: 'iPOS Pay', ok: Boolean(config.ipos), text: config.ipos ? `On (${config.ipos.paymentUrl.includes('.tech') ? 'sandbox' : 'live'})` : config.usdRate ? 'Off: add your iPOSpays details below' : 'Off: needs an exchange rate and your iPOSpays details' },
-  { name: 'Unipesa', ok: Boolean(config.unipesa), text: config.unipesa ? `On (${config.unipesa.country})` : 'Off: add your Unipesa details below' },
+  {
+    name: 'Unipesa',
+    ok: Boolean(config.unipesa),
+    text: config.unipesa
+      ? `On (${config.unipesa.country}${config.unipesa.providerId === '14' ? ', simulator' : ''}${config.unipesa.statusUrl ? ', double-checked' : ''})`
+      : 'Off: add your Unipesa details below',
+  },
   { name: 'Crypto', ok: Boolean(config.crypto), text: config.crypto ? `On (${config.crypto.baseUrl.includes('sandbox') ? 'sandbox' : 'live'})` : config.usdRate ? 'Off: add your NOWPayments keys below' : 'Off: needs an exchange rate and your NOWPayments keys' },
   { name: 'Email', ok: Boolean(rt.email), text: rt.email ? `On, sending from ${rt.email.from}` : 'Off: add your mail server below' },
 ];
@@ -189,7 +210,7 @@ const status = [
       <input type="hidden" name="action" value="save_general" />
       <label class="field">
         <span>Site address {!siteUrl && process.env['SITE_URL'] && <span class="source"> · from environment</span>}</span>
-        <span class="hint">The public address guests visit, e.g. https://whizperz.co.ke. Pay links and payment results use it.</span>
+        <span class="hint">The public address guests visit, e.g. https://tours.whizperzpizza.co.ke. Pay links and payment results use it.</span>
         <input name="siteUrl" value={siteUrl} placeholder={process.env['SITE_URL'] ?? detectedUrl} />
       </label>
       {!siteUrl && <p class="hint" style="margin:0">You’re using this site at <span class="code">{detectedUrl}</span>. If that’s the public address, type it above.</p>}
@@ -276,6 +297,8 @@ const status = [
         <SettingField name="consumerKey" label="Consumer key" value={s.pesapal?.consumerKey} source={src('pesapal', 'consumerKey')} envValue={envOf('pesapal', 'consumerKey')} />
         <SettingField name="consumerSecret" label="Consumer secret" secret source={src('pesapal', 'consumerSecret')} />
       </div>
+      <SettingField name="callbackIps" label="Pesapal’s server IP addresses" hint="Optional. If Pesapal gives you the addresses its notifications come from, list them (comma separated) and others are ignored. Every payment is confirmed with Pesapal’s API either way." value={s.pesapal?.callbackIps} source={src('pesapal', 'callbackIps')} envValue={envOf('pesapal', 'callbackIps')} />
+      <p class="hint" style="margin:0">After saving, the site registers its result address (IPN) with Pesapal by itself.</p>
       <div class="actions"><button class="button button--small" type="submit">Save Pesapal</button></div>
     </form>
     <div class="actions" style="margin-top:12px">
@@ -301,13 +324,13 @@ const status = [
         </select>
       </label>
       <SettingField name="tpn" label="TPN (terminal number)" hint="The e-commerce (CloudPOS) terminal number, usually 10–12 digits." value={s.ipos?.tpn} source={src('ipos', 'tpn')} envValue={envOf('ipos', 'tpn')} />
-      <SettingField name="authToken" label="Ecom auth token" hint="From the iPOSpays portal: Settings → Merchant Keys → Ecom token. Or leave this empty and fill in the API key and secret key below." secret source={src('ipos', 'authToken')} />
+      <SettingField name="authToken" label="Ecom auth token (recommended)" hint="iPOSpays portal → Settings → Merchant Keys / Ecom Token → choose your TPN → Generate Token. Or leave this empty and use the API key and secret key below instead." secret source={src('ipos', 'authToken')} />
       <div class="two">
         <SettingField name="apiKey" label="API key" value={s.ipos?.apiKey} source={src('ipos', 'apiKey')} envValue={envOf('ipos', 'apiKey')} />
         <SettingField name="secretKey" label="Secret key" secret source={src('ipos', 'secretKey')} />
       </div>
       <details class="action">
-        <summary>Live addresses (only if Dejavoo gives you different ones)</summary>
+        <summary>Addresses (already set from iPOSpays’ docs; change only if Dejavoo tells you to)</summary>
         <div class="admin-form">
           <SettingField name="paymentUrl" label="Payment page address" placeholder="https://payment.ipospays.com" value={s.ipos?.paymentUrl} source={src('ipos', 'paymentUrl')} envValue={envOf('ipos', 'paymentUrl')} />
           <SettingField name="apiUrl" label="Status API address" placeholder="https://api.ipospays.com" value={s.ipos?.apiUrl} source={src('ipos', 'apiUrl')} envValue={envOf('ipos', 'apiUrl')} />
@@ -324,22 +347,28 @@ const status = [
 
   <section class="panel" id="unipesa" aria-labelledby="unipesa-h">
     <h2 id="unipesa-h">Unipesa</h2>
-    <p class="hint">Mobile money and cards through Unipesa’s payment page. Unipesa sends the merchant ID and secret key when your account is approved.</p>
+    <p class="hint">Mobile money and cards through Unipesa’s payment page. Unipesa (or the partner who onboards you) sends these details when your merchant account is approved. Paste them exactly as given.</p>
     <form method="post" class="admin-form">
       <input type="hidden" name="action" value="save_unipesa" />
       <div class="two">
         <SettingField name="merchantId" label="Merchant ID" value={s.unipesa?.merchantId} source={src('unipesa', 'merchantId')} envValue={envOf('unipesa', 'merchantId')} />
-        <SettingField name="secretKey" label="Secret key" hint="Used to sign payments and check Unipesa’s results." secret source={src('unipesa', 'secretKey')} />
+        <SettingField name="secretKey" label="Secret key" hint="Signs every payment and checks every result. Never share it." secret source={src('unipesa', 'secretKey')} />
       </div>
       <div class="two">
-        <SettingField name="country" label="Country" hint="Two letters. KE for Kenya." placeholder="KE" value={s.unipesa?.country} source={src('unipesa', 'country')} envValue={envOf('unipesa', 'country')} />
-        <SettingField name="providerId" label="Provider ID" hint="Optional. Which payment option Unipesa opens with (Unipesa gives you the numbers)." value={s.unipesa?.providerId} source={src('unipesa', 'providerId')} envValue={envOf('unipesa', 'providerId')} />
+        <SettingField name="providerId" label="Provider ID" hint="Which payment option Unipesa’s page uses: 12 = Safaricom M-Pesa, 16 = Airtel Money (Kenya). 14 = their simulator, for testing. Leave empty if Unipesa says so." value={s.unipesa?.providerId} source={src('unipesa', 'providerId')} envValue={envOf('unipesa', 'providerId')} />
+        <SettingField name="publicId" label="Merchant public ID" hint="Only if Unipesa gives you one separately from the merchant ID." value={s.unipesa?.publicId} source={src('unipesa', 'publicId')} envValue={envOf('unipesa', 'publicId')} />
       </div>
+      <SettingField name="statusUrl" label="Status check address" hint="Unipesa’s transaction-status address, as they give it. Where it contains your public ID, write {public_id} (or {merchant_id}). With it, every payment is double-checked with Unipesa before a booking is marked paid." placeholder="https://…/{public_id}/…" value={s.unipesa?.statusUrl} source={src('unipesa', 'statusUrl')} envValue={envOf('unipesa', 'statusUrl')} />
+      <SettingField name="callbackIps" label="Unipesa’s server IP addresses" hint="Optional but recommended. Results from any other address are ignored. Separate with commas; ranges like 41.90.1.0/24 work." value={s.unipesa?.callbackIps} source={src('unipesa', 'callbackIps')} envValue={envOf('unipesa', 'callbackIps')} />
       <details class="action">
-        <summary>Addresses (only if Unipesa gives you different ones)</summary>
+        <summary>More (only if Unipesa tells you to change these)</summary>
         <div class="admin-form">
+          <div class="two">
+            <SettingField name="country" label="Country" hint="Two letters." placeholder="KE" value={s.unipesa?.country} source={src('unipesa', 'country')} envValue={envOf('unipesa', 'country')} />
+            <SettingField name="currency" label="Currency" hint="Three letters." placeholder="KES" value={s.unipesa?.currency} source={src('unipesa', 'currency')} envValue={envOf('unipesa', 'currency')} />
+          </div>
+          <SettingField name="payType" label="Payment type" hint="Sent to the payment page as “type”, for example card." value={s.unipesa?.payType} source={src('unipesa', 'payType')} envValue={envOf('unipesa', 'payType')} />
           <SettingField name="hppUrl" label="Payment page address" placeholder="https://hpp.unipesa.tech" value={s.unipesa?.hppUrl} source={src('unipesa', 'hppUrl')} envValue={envOf('unipesa', 'hppUrl')} />
-          <SettingField name="statusUrl" label="Status check address" hint="Optional. Unipesa’s transaction status address. With it, every payment is double-checked with Unipesa." value={s.unipesa?.statusUrl} source={src('unipesa', 'statusUrl')} envValue={envOf('unipesa', 'statusUrl')} />
         </div>
       </details>
       <div class="actions"><button class="button button--small" type="submit">Save Unipesa</button></div>
@@ -347,7 +376,18 @@ const status = [
     <div class="actions" style="margin-top:12px">
       <form method="post"><input type="hidden" name="action" value="test_unipesa" /><button class="button button--small button--ghost" type="submit" disabled={!config.unipesa}>Check settings</button></form>
     </div>
-    {config.unipesa && <p class="hint">Payment results go to: <span class="code">{config.unipesa.notifyUrl.replace(config.unipesa.callbackSecret, '••••')}</span> (sent with every payment).</p>}
+    {config.unipesa && (
+      <p class="hint">
+        Payment results go to: <span class="code">{config.unipesa.notifyUrl.replace(config.unipesa.callbackSecret, '••••')}</span>. It is sent with every payment; if Unipesa asks for a callback address, give them the full address (copy it from the line below).
+      </p>
+    )}
+    {config.unipesa && (
+      <div class="copy-row">
+        <input id="unipesa-notify" readonly value={config.unipesa.notifyUrl} aria-label="Unipesa result address" />
+        <button class="button button--small button--ghost" type="button" data-copy="#unipesa-notify">Copy</button>
+      </div>
+    )}
+    {config.unipesa && !config.unipesa.statusUrl && <p class="hint">Without a status check address, payments are confirmed by Unipesa’s signed results alone. Ask Unipesa for the address to add the second check.</p>}
   </section>
 
   <section class="panel" id="crypto" aria-labelledby="crypto-h">
@@ -397,7 +437,7 @@ const status = [
         <SettingField name="pass" label="Password" secret source={src('email', 'pass')} />
       </div>
       <div class="two">
-        <SettingField name="from" label="Send from" placeholder="Whizperz Tours <bookings@whizperz.co.ke>" value={s.email?.from} source={src('email', 'from')} />
+        <SettingField name="from" label="Send from" placeholder="Whizperz Tours <bookings@whizperzpizza.co.ke>" value={s.email?.from} source={src('email', 'from')} />
         <SettingField name="notifyTo" label="Send payment alerts to" hint="Your team’s address. Leave empty for no alerts." value={s.email?.notifyTo} source={src('email', 'notifyTo')} envValue={envOf('email', 'notifyTo')} />
       </div>
       <div class="actions"><button class="button button--small" type="submit">Save email</button></div>

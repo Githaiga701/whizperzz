@@ -137,3 +137,14 @@ describe('parsePesapalIpn', () => {
     expect(parsePesapalIpn(input)).toBeNull();
   });
 });
+
+describe('Pesapal API 3 details', () => {
+  it('keeps descriptions within Pesapal’s limits', async () => {
+    const { pesapalDescription, PESAPAL_REF } = await import('@/lib/payments/pesapal');
+    expect(pesapalDescription('a'.repeat(150))).toHaveLength(100);
+    expect(pesapalDescription('<b>Trip</b> "x"')).toBe('bTrip/b x');
+    expect(pesapalDescription('   ')).toBe('Whizperz booking');
+    expect(PESAPAL_REF.test('WZ-ABC123-1')).toBe(true);
+    expect(PESAPAL_REF.test('WZ ABC/1')).toBe(false);
+  });
+});

@@ -148,6 +148,12 @@ test('settings: M-Pesa and Pesapal keys, test buttons and IPN', async () => {
   await page.locator('#pesapal').getByRole('button', { name: /Register IPN/ }).click();
   await expect(flash()).toContainText('Pesapal IPN registered');
   await expect(page.locator('#pesapal')).toContainText('mock-ipn-registered');
+
+  // New keys clear the old IPN; the site finds or registers its result address again by itself.
+  await page.locator('#pesapal').getByLabel('Consumer key').fill('e2e-pk-new');
+  await page.locator('#pesapal').getByRole('button', { name: 'Save Pesapal' }).click();
+  await expect(flash()).toContainText('Pesapal now sends payment results to this site');
+  await expect(page.locator('.status-list li', { hasText: 'Card (Pesapal)' })).not.toContainText('Almost');
 });
 
 let mpesaRef = '';
@@ -171,9 +177,15 @@ test('settings: iPOS Pay, Unipesa and crypto are on, and their test buttons work
   await expect(page.locator('#crypto')).toContainText('/api/callbacks/crypto/••••');
 
   // A bad value is refused with a clear message.
+  await page.locator('#unipesa summary', { hasText: 'More' }).click();
   await page.locator('#unipesa').getByLabel(/^Country/).fill('Kenya');
   await page.locator('#unipesa').getByRole('button', { name: 'Save Unipesa' }).click();
   await expect(flash()).toContainText('two-letter country code');
+  // The Unipesa result address can be copied in full for Unipesa's onboarding form.
+  await expect(page.locator('#unipesa-notify')).toHaveValue(/\/api\/callbacks\/unipesa\/e2e-unipesa-cb$/);
+  await page.locator('#unipesa').getByLabel(/server IP addresses/).fill('not an ip');
+  await page.locator('#unipesa').getByRole('button', { name: 'Save Unipesa' }).click();
+  await expect(flash()).toContainText('List IP addresses');
 });
 
 test('create a quote and email the pay link', async ({ request }) => {

@@ -34,6 +34,8 @@ export interface GatewayNotice {
   headers: Headers;
   body: Record<string, unknown>;
   raw: string;
+  /** The sender's IP address, when known. */
+  ip?: string | undefined;
 }
 
 export interface ReadNotice {

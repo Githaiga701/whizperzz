@@ -15,7 +15,7 @@ if (recovering && !Astro.url.searchParams.has('recover')) return Astro.redirect(
 
 // Creating the first admin is allowed from this computer, or anywhere with the setup key from the host's settings.
 const setupKey = process.env['ADMIN_SETUP_KEY']?.trim() ?? '';
-const local = isLocalRequest(Astro.request, Astro.clientAddress);
+const local = isLocalRequest(Astro.request, Astro.locals.ip);
 const needsKey = !local;
 let error = '';
 let username = '';

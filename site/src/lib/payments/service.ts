@@ -421,6 +421,7 @@ export async function startPesapal(
       amount: quote.amountKes,
       description: `${quote.description} (${quote.ref})`,
       callbackUrl: `${payUrl(deps.config, quote.ref)}?return=card`,
+      cancellationUrl: payUrl(deps.config, quote.ref),
       email,
       phone,
       firstName: quote.guestName.split(/\s+/)[0] ?? quote.guestName,
@@ -455,7 +456,7 @@ async function checkPesapal(deps: PaymentDeps, ref: string, payment: Payment): P
   const now = deps.now();
   const outcome = mapPesapalStatus(status.status_code);
   const matches =
-    status.merchant_reference === payment.merchantRef && status.currency?.toUpperCase() === 'KES' && Number(status.amount) === payment.amountKes;
+    status.merchant_reference === payment.merchantRef && status.currency?.toUpperCase() === 'KES' && sameMoney(Number(status.amount), payment.amountKes);
 
   if (outcome === 'paid' && !matches) {
     const flag = `Pesapal reported a completed payment that doesn’t match: ${status.merchant_reference}, ${status.currency} ${status.amount}.`;
@@ -467,7 +468,8 @@ async function checkPesapal(deps: PaymentDeps, ref: string, payment: Payment): P
   if (outcome === 'paid') {
     let changed = false;
     await deps.store.update(ref, (q) => {
-      changed = markPaid(q, payment.id, status.confirmation_code, now, { method: status.payment_method });
+      const account = typeof status.payment_account === 'string' ? status.payment_account.replace(/^.*(\d{4})$/, '••$1') : '';
+      changed = markPaid(q, payment.id, status.confirmation_code, now, { method: [status.payment_method, account].filter(Boolean).join(' ') || undefined });
     });
     if (changed) {
       deps.log('info', 'Pesapal payment confirmed', { ref });

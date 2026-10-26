@@ -157,3 +157,22 @@ export function requireAdmin(request: Request, locals: App.Locals): string {
   if (isAdmin(getPaymentDeps().config, request.headers.get('authorization'))) return 'api';
   throw new PaymentError(401, 'unauthorized', 'Log in to the admin, or send the admin token.');
 }
+
+/**
+ * Makes sure Pesapal knows where to send payment results: reuses an IPN already registered for this
+ * site's address, or registers one. Runs after Pesapal keys or the site address are saved, so there
+ * is no separate step to remember. Returns what happened, for the Settings message.
+ */
+export async function ensurePesapalIpn(): Promise<'ready' | 'reused' | 'registered' | 'off'> {
+  const rt = getRuntime();
+  const cfg = rt.deps.config.pesapal;
+  const client = rt.deps.pesapal;
+  if (!cfg || !client) return 'off';
+  if (cfg.ipnId) return 'ready';
+  const existing = (await client.ipnList().catch(() => [])).find((x) => x.url === cfg.ipnUrl);
+  const ipnId = existing?.ipn_id ?? (await client.registerIpn(cfg.ipnUrl)).ipn_id;
+  rt.settings.setPesapalIpnId(ipnId, cfg.ipnUrl);
+  log('info', existing ? 'Pesapal IPN reused' : 'Pesapal IPN registered', { url: cfg.ipnUrl.replace(cfg.callbackSecret, '••••') });
+  reloadRuntime();
+  return existing ? 'reused' : 'registered';
+}

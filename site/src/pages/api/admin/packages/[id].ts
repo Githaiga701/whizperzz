@@ -14,17 +14,17 @@ async function find(id: string | undefined) {
   return pkg;
 }
 
-export const GET: APIRoute = ({ request, clientAddress, locals, params }) =>
+export const GET: APIRoute = ({ request, locals, params }) =>
   handle(async () => {
-    rateLimit(`admin:${clientAddress}`, 30, 60_000);
+    rateLimit(`admin:${locals.ip}`, 30, 60_000);
     requireAdmin(request, locals);
     return json(200, { package: await find(params['id']) });
   });
 
 /** Changes some fields, e.g. { "adultKes": 185000, "published": true }. Fields left out stay as they are. */
-export const PATCH: APIRoute = ({ request, clientAddress, locals, params }) =>
+export const PATCH: APIRoute = ({ request, locals, params }) =>
   handle(async () => {
-    rateLimit(`admin:${clientAddress}`, 30, 60_000);
+    rateLimit(`admin:${locals.ip}`, 30, 60_000);
     requireAdmin(request, locals);
     const existing = await find(params['id']);
     const body = await readJson(request);
@@ -38,9 +38,9 @@ export const PATCH: APIRoute = ({ request, clientAddress, locals, params }) =>
     }
   });
 
-export const DELETE: APIRoute = ({ request, clientAddress, locals, params }) =>
+export const DELETE: APIRoute = ({ request, locals, params }) =>
   handle(async () => {
-    rateLimit(`admin:${clientAddress}`, 30, 60_000);
+    rateLimit(`admin:${locals.ip}`, 30, 60_000);
     requireAdmin(request, locals);
     const existing = await find(params['id']);
     await getPackageStore().remove(existing.id);

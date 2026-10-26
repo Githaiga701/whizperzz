@@ -9,3 +9,6 @@ data/
 test-results/
 playwright-report/
 .e2e-data/
+
+cpanel-upload/
+whizperz-cpanel.tar.gz

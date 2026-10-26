@@ -32,7 +32,15 @@ describe('loadPaymentConfig', () => {
     const c = loadPaymentConfig({ ...FULL_ENV, PESAPAL_IPN_ID: '' });
     expect(c.pesapal).toBeDefined();
     expect(pesapalReady(c)).toBe(false);
-    expect(c.warnings.join(' ')).toMatch(/register-ipn/);
+    expect(c.warnings.join(' ')).toMatch(/IPN is registered/);
+  });
+
+  it('forgets an IPN id registered for an older site address', () => {
+    const ipnUrl = 'https://whizperz.test/api/callbacks/pesapal/pesapal-cb-secret';
+    expect(loadPaymentConfig({ ...FULL_ENV, PESAPAL_IPN_URL: ipnUrl }).pesapal?.ipnId).toBe('ipn-123');
+    const moved = loadPaymentConfig({ ...FULL_ENV, PESAPAL_IPN_URL: 'https://old.example/api/callbacks/pesapal/pesapal-cb-secret' });
+    expect(moved.pesapal?.ipnId).toBeUndefined();
+    expect(moved.warnings.join(' ')).toMatch(/site address changed/);
   });
 
   it('uses production URLs in production mode and warns about http', () => {

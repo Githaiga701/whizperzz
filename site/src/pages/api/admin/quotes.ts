@@ -5,18 +5,18 @@ import { getPaymentDeps, handle, json, rateLimit, readJson, requireAdmin } from 
 export const prerender = false;
 
 /** Lists quotes. Header: Authorization: Bearer <ADMIN_TOKEN> */
-export const GET: APIRoute = ({ request, clientAddress, locals }) =>
+export const GET: APIRoute = ({ request, locals }) =>
   handle(async () => {
-    rateLimit(`admin:${clientAddress}`, 30, 60_000);
+    rateLimit(`admin:${locals.ip}`, 30, 60_000);
     requireAdmin(request, locals);
     const deps = getPaymentDeps();
     return json(200, { quotes: await deps.store.list() });
   });
 
 /** Creates a quote. Body: { guestName, description, amountKes, email?, phone? }. Returns the pay link to send the guest. */
-export const POST: APIRoute = ({ request, clientAddress, locals }) =>
+export const POST: APIRoute = ({ request, locals }) =>
   handle(async () => {
-    rateLimit(`admin:${clientAddress}`, 30, 60_000);
+    rateLimit(`admin:${locals.ip}`, 30, 60_000);
     const by = requireAdmin(request, locals);
     const deps = getPaymentDeps();
     const quote = await createQuote(deps, await readJson(request), by);

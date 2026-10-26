@@ -10,9 +10,9 @@ export const prerender = false;
  * Body: { packageId, travelDate, adults, children, plan, method, name, email, phone }.
  * Returns { ref, next, warning? }. The price is worked out here, never taken from the browser.
  */
-export const POST: APIRoute = ({ request, clientAddress }) =>
+export const POST: APIRoute = ({ request, locals }) =>
   handle(async () => {
-    rateLimit(`book:${clientAddress}`, 10, 60_000);
+    rateLimit(`book:${locals.ip}`, 10, 60_000);
     const body = await readJson(request);
     const result = await bookPackage(getPaymentDeps(), getPackageStore(), getRuntime().booking, body);
     return json(201, result);

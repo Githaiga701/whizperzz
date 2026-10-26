@@ -19,6 +19,8 @@ export interface TransactionStatusResponse extends PesapalError {
   amount: number;
   created_date?: string;
   confirmation_code?: string;
+  /** Masked card number or phone number. */
+  payment_account?: string;
   payment_status_description?: string;
   description?: string;
   /** 0 invalid, 1 completed, 2 failed, 3 reversed. */
@@ -30,6 +32,12 @@ export interface TransactionStatusResponse extends PesapalError {
 export interface RegisterIpnResponse extends PesapalError {
   url: string;
   ipn_id: string;
+}
+
+export interface IpnListItem {
+  url: string;
+  ipn_id: string;
+  created_date?: string;
 }
 
 /** What Pesapal sends to the IPN URL (as JSON body or query string). */
@@ -65,6 +73,8 @@ export interface SubmitOrderInput {
   amount: number;
   description: string;
   callbackUrl: string;
+  /** Where "Cancel" on Pesapal's page goes. */
+  cancellationUrl?: string | undefined;
   email: string | undefined;
   phone: string | undefined;
   firstName: string;
@@ -83,6 +93,8 @@ export interface RefundResponse extends PesapalError {
 
 export interface Pesapal {
   registerIpn(url: string): Promise<RegisterIpnResponse>;
+  /** The IPN addresses already registered on this Pesapal account. */
+  ipnList(): Promise<IpnListItem[]>;
   submitOrder(input: SubmitOrderInput): Promise<SubmitOrderResponse>;
   transactionStatus(orderTrackingId: string): Promise<TransactionStatusResponse>;
   /** Asks Pesapal to refund. The merchant still approves it in the Pesapal dashboard. */
@@ -96,6 +108,19 @@ function check<T extends PesapalError>(res: T, what: string): T {
     throw new ProviderError('pesapal', `Pesapal ${what} failed: ${res.error.message || res.error.code}`, undefined, res.error);
   }
   return res;
+}
+
+/** Pesapal order ids: letters, digits, "-", "_", "." and ":", at most 50. */
+export const PESAPAL_REF = /^[A-Za-z0-9._:-]{1,50}$/;
+
+/** Pesapal descriptions: at most 100 characters; keep to plain text. */
+export function pesapalDescription(text: string): string {
+  return text.replace(/[<>"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 100) || 'Whizperz booking';
+}
+
+function statusOk(res: { status?: unknown; error?: unknown }): boolean {
+  const code = res.status ?? (typeof res.error === 'number' || typeof res.error === 'string' ? res.error : undefined);
+  return code === undefined || String(code) === '200';
 }
 
 export function createPesapal(config: PesapalConfig, fetchImpl: FetchLike = fetch, now: () => Date = () => new Date()): Pesapal {
@@ -112,8 +137,10 @@ export function createPesapal(config: PesapalConfig, fetchImpl: FetchLike = fetc
       'sign-in',
     );
     if (!res.token) throw new ProviderError('pesapal', 'Pesapal did not return a token. Check the consumer key and secret.');
-    // Tokens last 5 minutes. Keep ours for 4 to be safe.
-    cached = { token: res.token, expiresAt: now().getTime() + 4 * 60 * 1000 };
+    // Tokens last at most 5 minutes. Renew a minute early (sooner if Pesapal says it expires sooner).
+    const said = res.expiryDate ? Date.parse(res.expiryDate.endsWith('Z') ? res.expiryDate : `${res.expiryDate}Z`) : NaN;
+    const fourMinutes = now().getTime() + 4 * 60 * 1000;
+    cached = { token: res.token, expiresAt: Number.isFinite(said) ? Math.min(fourMinutes, said - 60_000) : fourMinutes };
     return cached.token;
   }
 
@@ -127,18 +154,29 @@ export function createPesapal(config: PesapalConfig, fetchImpl: FetchLike = fetc
   }
 
   return {
-    registerIpn(url) {
-      return call<RegisterIpnResponse>('POST', '/api/URLSetup/RegisterIPN', 'IPN registration', { url, ipn_notification_type: 'POST' });
+    async registerIpn(url) {
+      const res = await call<RegisterIpnResponse>('POST', '/api/URLSetup/RegisterIPN', 'IPN registration', { url, ipn_notification_type: 'POST' });
+      if (!res.ipn_id) throw new ProviderError('pesapal', 'Pesapal did not return an IPN id.', undefined, res);
+      return res;
+    },
+    async ipnList() {
+      const res = (await call<PesapalError>('GET', '/api/URLSetup/GetIpnList', 'IPN list')) as unknown as IpnListItem[] | { data?: IpnListItem[] };
+      const items = Array.isArray(res) ? res : (res.data ?? []);
+      return items.filter((x) => typeof x?.url === 'string' && typeof x?.ipn_id === 'string');
     },
     async submitOrder(input) {
       if (!config.ipnId) throw new ProviderError('pesapal', 'PESAPAL_IPN_ID is not set. Run npm run pesapal:register-ipn first.');
       if (!input.email && !input.phone) throw new ProviderError('pesapal', 'Pesapal needs an email address or phone number for the payer.');
+      if (!PESAPAL_REF.test(input.merchantReference)) throw new ProviderError('pesapal', 'Invalid Pesapal order reference.');
+      if (!(input.amount > 0)) throw new ProviderError('pesapal', 'Pesapal amounts must be more than zero.');
       const res = await call<SubmitOrderResponse>('POST', '/api/Transactions/SubmitOrderRequest', 'order', {
         id: input.merchantReference,
         currency: 'KES',
         amount: input.amount,
-        description: input.description.slice(0, 100),
+        description: pesapalDescription(input.description),
         callback_url: input.callbackUrl,
+        ...(input.cancellationUrl ? { cancellation_url: input.cancellationUrl } : {}),
+        redirect_mode: 'TOP_WINDOW',
         notification_id: config.ipnId,
         billing_address: {
           email_address: input.email ?? '',
@@ -148,6 +186,9 @@ export function createPesapal(config: PesapalConfig, fetchImpl: FetchLike = fetc
         },
       });
       if (!res.redirect_url || !res.order_tracking_id) throw new ProviderError('pesapal', 'Pesapal did not return a checkout link.', undefined, res);
+      if (!/^https:\/\//.test(res.redirect_url) && !/^http:\/\/(127\.0\.0\.1|localhost)[:/]/.test(res.redirect_url)) {
+        throw new ProviderError('pesapal', 'Pesapal returned a checkout link that isn’t https.', undefined, res);
+      }
       return res;
     },
     transactionStatus(orderTrackingId) {
@@ -164,7 +205,7 @@ export function createPesapal(config: PesapalConfig, fetchImpl: FetchLike = fetc
         username: input.username,
         remarks: input.remarks.slice(0, 200) || 'Refund',
       });
-      if (res.status !== undefined && String(res.status) !== '200') {
+      if (!statusOk(res)) {
         throw new ProviderError('pesapal', `Pesapal refused the refund: ${res.message ?? `status ${res.status}`}`, undefined, res);
       }
       return res;
