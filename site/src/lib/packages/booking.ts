@@ -133,7 +133,8 @@ export async function bookPackage(deps: PaymentDeps, packages: PackageStore, cfg
   });
   deps.log('info', 'Package booked', { ref: quote.ref, packageId: pkg.id, totalKes: price.totalKes, plan, method });
 
-  const pay = payUrl(deps.config, quote.ref);
+  // The guest is already on this site, so send them to the pay page by path: it works whatever SITE_URL says.
+  const pay = new URL(payUrl(deps.config, quote.ref)).pathname;
   try {
     if (method === 'mpesa') {
       await startMpesa(deps, quote.ref, phoneRaw);

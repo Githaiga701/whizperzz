@@ -192,7 +192,9 @@ function missing(names: [string, string | undefined][]): string[] {
 export function loadPaymentConfig(raw: Record<string, string | undefined>): PaymentConfig {
   const env = envSchema.parse(raw);
   const warnings: string[] = [];
-  const siteUrl = (env.SITE_URL ?? 'http://localhost:4321').replace(/\/+$/, '');
+  // Without SITE_URL, use the address Vercel gives the site (previews), and only then this computer.
+  const vercelHost = raw['VERCEL_PROJECT_PRODUCTION_URL']?.trim() || raw['VERCEL_URL']?.trim();
+  const siteUrl = (env.SITE_URL ?? (vercelHost ? `https://${vercelHost}` : 'http://localhost:4321')).replace(/\/+$/, '');
   const mode = env.PAYMENTS_MODE;
 
   if (mode === 'production' && !siteUrl.startsWith('https://')) {

@@ -110,7 +110,7 @@ describe('bookPackage', () => {
   it('saves the booking at the server’s price and sends the M-Pesa prompt for the deposit', async () => {
     const { deps, packages, cfg, daraja } = await setup();
     const res = await bookPackage(deps, packages, cfg, booking());
-    expect(res.next).toBe(`https://whizperz.test/pay/${res.ref}/`);
+    expect(res.next).toBe(`/pay/${res.ref}/`);
     expect(res.warning).toBeUndefined();
 
     const q = (await deps.store.get(res.ref))!;
@@ -150,7 +150,7 @@ describe('bookPackage', () => {
     const { deps, packages, cfg, daraja } = await setup();
     daraja.stkPush.mockRejectedValueOnce(new Error('Safaricom is down'));
     const res = await bookPackage(deps, packages, cfg, booking());
-    expect(res.next).toBe(`https://whizperz.test/pay/${res.ref}/`);
+    expect(res.next).toBe(`/pay/${res.ref}/`);
     expect(res.warning).toBe('We couldn’t reach M-Pesa just now. Please try again in a minute.');
     expect((await deps.store.get(res.ref))!.status).toBe('awaiting_payment');
   });
