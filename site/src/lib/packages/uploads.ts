@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PackageError } from './store';
+import { readMediaFromRedis, saveMediaToRedis, usingRedis } from '@/lib/storage/docs';
 
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
@@ -24,17 +25,25 @@ export function saveImage(dir: string, bytes: Uint8Array, prefix: string): strin
   if (!ext) throw new PackageError('The photo must be a JPG, PNG or WebP image.');
   const safe = prefix.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40) || 'photo';
   const name = `${safe}-${randomBytes(4).toString('hex')}.${ext}`;
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, name), bytes);
+  if (usingRedis()) {
+    saveMediaToRedis(name, bytes);
+  } else {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, name), bytes);
+  }
   return `/media/${name}`;
 }
 
 const NAME = /^[a-z0-9-]{1,60}\.(jpg|png|webp)$/;
 
 /** Reads a saved photo for /media/<file>. Only names we generated are allowed, so no path tricks. */
-export function readImage(dir: string, name: string): { body: Buffer; type: string; size: number } | undefined {
+export async function readImage(dir: string, name: string): Promise<{ body: Buffer; type: string; size: number } | undefined> {
   const m = NAME.exec(name);
   if (!m) return undefined;
+  if (usingRedis()) {
+    const body = await readMediaFromRedis(name);
+    return body ? { body, type: TYPES[m[1] as ImageExt], size: body.length } : undefined;
+  }
   try {
     const file = join(dir, name);
     const { size } = statSync(file);

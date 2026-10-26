@@ -142,41 +142,69 @@ export function memoryPersistence(): Persistence & { snapshot(): State | null } 
   };
 }
 
+/**
+ * How quotes are kept. `change` runs one change to one quote at a time (here and, with Redis, across every copy
+ * of the site), so a payment confirmation and a status check arriving together can't overwrite each other.
+ */
+export interface QuoteRecords {
+  all(): Promise<Quote[]>;
+  get(ref: string): Promise<Quote | undefined>;
+  change<T>(ref: string, fn: (current: Quote | undefined) => { next: Quote; result: T }): Promise<T>;
+}
+
+/** All quotes in one saved state (a JSON file, or memory in tests), changed one at a time in this process. */
+export function stateRecords(persistence: Persistence): QuoteRecords {
+  let state: State | undefined;
+  let queue: Promise<unknown> = Promise.resolve();
+  const load = async (): Promise<State> => (state ??= (await persistence.read()) ?? { version: 1, quotes: {} });
+  return {
+    async all() {
+      return Object.values((await load()).quotes);
+    },
+    async get(ref) {
+      return (await load()).quotes[ref];
+    },
+    change(ref, fn) {
+      const run = queue.then(async () => {
+        const s = await load();
+        const { next, result } = fn(s.quotes[ref] ? structuredClone(s.quotes[ref]) : undefined);
+        const before = s.quotes[ref];
+        s.quotes[ref] = next;
+        try {
+          await persistence.write(s);
+        } catch (err) {
+          // Keep memory in step with what was actually saved.
+          if (before) s.quotes[ref] = before;
+          else delete s.quotes[ref];
+          throw err;
+        }
+        return result;
+      });
+      queue = run.catch(() => undefined);
+      return run;
+    },
+  };
+}
+
 export class QuoteStore {
-  private state: State | undefined;
-  private queue: Promise<unknown> = Promise.resolve();
+  private readonly records: QuoteRecords;
 
-  constructor(private readonly persistence: Persistence) {}
-
-  private async load(): Promise<State> {
-    if (!this.state) this.state = (await this.persistence.read()) ?? { version: 1, quotes: {} };
-    return this.state;
-  }
-
-  /** Runs one change at a time, so two callbacks arriving together can't overwrite each other. */
-  private serial<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(fn, fn);
-    this.queue = run.catch(() => undefined);
-    return run;
+  constructor(persistence: Persistence | QuoteRecords) {
+    this.records = 'change' in persistence ? persistence : stateRecords(persistence);
   }
 
   async get(ref: string): Promise<Quote | undefined> {
-    const s = await this.load();
-    const q = s.quotes[ref];
+    const q = await this.records.get(ref);
     return q ? structuredClone(q) : undefined;
   }
 
   async list(): Promise<Quote[]> {
-    const s = await this.load();
-    return Object.values(s.quotes)
-      .map((q) => structuredClone(q))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return (await this.records.all()).map((q) => structuredClone(q)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   /** Finds a payment by the reference we sent the provider (our merchant reference). */
   async findByMerchantRef(provider: Provider, merchantRef: string): Promise<{ quote: Quote; payment: Payment } | undefined> {
-    const s = await this.load();
-    for (const q of Object.values(s.quotes)) {
+    for (const q of await this.records.all()) {
       const p = q.payments.find((x) => x.provider === provider && x.merchantRef === merchantRef);
       if (p) return { quote: structuredClone(q), payment: structuredClone(p) };
     }
@@ -184,8 +212,7 @@ export class QuoteStore {
   }
 
   async findPayment(provider: Provider, providerRef: string): Promise<{ quote: Quote; payment: Payment } | undefined> {
-    const s = await this.load();
-    for (const q of Object.values(s.quotes)) {
+    for (const q of await this.records.all()) {
       const p = q.payments.find((x) => x.provider === provider && x.providerRef === providerRef);
       if (p) return { quote: structuredClone(q), payment: structuredClone(p) };
     }
@@ -194,32 +221,23 @@ export class QuoteStore {
 
   /** First quote matching a test, e.g. the one holding a refund with a given Daraja conversation id. */
   async find(test: (q: Quote) => boolean): Promise<Quote | undefined> {
-    const s = await this.load();
-    const q = Object.values(s.quotes).find(test);
+    const q = (await this.records.all()).find(test);
     return q ? structuredClone(q) : undefined;
   }
 
   create(quote: Quote): Promise<Quote> {
-    return this.serial(async () => {
-      const s = await this.load();
-      if (s.quotes[quote.ref]) throw new Error(`Quote ${quote.ref} already exists`);
-      s.quotes[quote.ref] = structuredClone(quote);
-      await this.persistence.write(s);
-      return structuredClone(quote);
+    return this.records.change(quote.ref, (current) => {
+      if (current) throw new Error(`Quote ${quote.ref} already exists`);
+      return { next: structuredClone(quote), result: structuredClone(quote) };
     });
   }
 
   /** Applies a change to one quote and saves it. The change function gets a copy; returning it commits. */
   update(ref: string, change: (q: Quote) => Quote | void): Promise<Quote> {
-    return this.serial(async () => {
-      const s = await this.load();
-      const current = s.quotes[ref];
+    return this.records.change(ref, (current) => {
       if (!current) throw new Error(`Quote ${ref} not found`);
-      const draft = structuredClone(current);
-      const next = change(draft) ?? draft;
-      s.quotes[ref] = next;
-      await this.persistence.write(s);
-      return structuredClone(next);
+      const next = change(current) ?? current;
+      return { next, result: structuredClone(next) };
     });
   }
 }

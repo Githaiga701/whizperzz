@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
-import { readJsonSync, writeJsonSync } from '@/lib/files';
+import { docsFor, type DocStore } from '@/lib/storage/docs';
 
 /**
  * Settings entered in the admin screen. Saved in DATA_DIR/settings.json.
@@ -215,21 +215,20 @@ function validateField(field: string, v: string): void {
 }
 
 export class SettingsStore {
-  private cache: Settings | undefined;
+  private readonly docs: DocStore;
   readonly file: string;
 
   constructor(dataDir: string) {
     this.file = join(dataDir, 'settings.json');
+    this.docs = docsFor(dataDir);
   }
 
   read(): Settings {
-    if (!this.cache) this.cache = readJsonSync<Settings>(this.file) ?? {};
-    return structuredClone(this.cache);
+    return this.docs.read<Settings>('settings.json') ?? {};
   }
 
   private write(next: Settings): Settings {
-    writeJsonSync(this.file, next, { private: true });
-    this.cache = next;
+    this.docs.write('settings.json', next, { private: true });
     return structuredClone(next);
   }
 

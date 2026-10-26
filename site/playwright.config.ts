@@ -53,6 +53,11 @@ const siteEnv = {
   NOWPAYMENTS_BASE_URL: `${mock}/nowpayments/v1`,
 };
 
+// E2E_REDIS=1 runs the same tests with saved data in (fake) Upstash Redis, the way the site runs on Vercel.
+const redis = process.env['E2E_REDIS'] === '1';
+const FAKE_UPSTASH_PORT = 4396;
+if (redis) Object.assign(siteEnv, { KV_REST_API_URL: `http://127.0.0.1:${FAKE_UPSTASH_PORT}`, KV_REST_API_TOKEN: 'fake-upstash-token' });
+
 export default defineConfig({
   testDir: 'tests/e2e',
   fullyParallel: true,
@@ -70,6 +75,9 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['Pixel 7'] }, testIgnore: /admin\.spec\.ts/ },
   ],
   webServer: [
+    ...(redis
+      ? [{ command: 'npx tsx tests/fake-upstash.ts', url: `http://127.0.0.1:${FAKE_UPSTASH_PORT}/health`, env: { FAKE_UPSTASH_PORT: String(FAKE_UPSTASH_PORT) }, reuseExistingServer: false }]
+      : []),
     {
       command: 'npx tsx tests/e2e/mock-providers.ts',
       url: `${mock}/health`,

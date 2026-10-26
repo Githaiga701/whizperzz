@@ -1,23 +1,12 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { docsFor } from '@/lib/storage/docs';
 
 export const SESSION_COOKIE = 'wz_admin';
 export const SESSION_HOURS = 12;
 
-/** The key that signs login cookies. Created once and kept in the data folder. */
+/** The key that signs login cookies. Created once and kept with the saved data (data folder or Redis). */
 export function loadSessionKey(dataDir: string): Buffer {
-  const file = join(dataDir, 'session.key');
-  try {
-    const hex = readFileSync(file, 'utf8').trim();
-    if (/^[0-9a-f]{64}$/.test(hex)) return Buffer.from(hex, 'hex');
-  } catch {
-    /* create below */
-  }
-  mkdirSync(dataDir, { recursive: true });
-  const key = randomBytes(32);
-  writeFileSync(file, key.toString('hex'), { mode: 0o600 });
-  return key;
+  return Buffer.from(docsFor(dataDir).sessionKeyHex(), 'hex');
 }
 
 function sign(key: Buffer, payload: string): string {

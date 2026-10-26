@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { readJsonSync, writeJsonSync } from '@/lib/files';
+import { docsFor, type DocStore } from '@/lib/storage/docs';
 import { slugify } from './slug';
 
 export { slugify };
@@ -166,8 +166,8 @@ interface PackagesFile {
 
 export class PackageStore {
   readonly file: string;
-  private cache: PackagesFile | undefined;
-  private seeding: Promise<void> | undefined;
+  private readonly docs: DocStore;
+  private seeding: Promise<PackagesFile> | undefined;
 
   /** `seed` provides the starting journeys the first time, when there is no packages.json yet. */
   constructor(
@@ -175,22 +175,22 @@ export class PackageStore {
     private readonly seed: () => Promise<TripPackage[]>,
   ) {
     this.file = join(dataDir, 'packages.json');
+    this.docs = docsFor(dataDir);
   }
 
   private async load(): Promise<PackagesFile> {
-    if (this.cache) return this.cache;
-    const saved = readJsonSync<PackagesFile>(this.file);
-    if (saved) {
-      this.cache = saved;
-      return saved;
-    }
+    const saved = this.docs.read<PackagesFile>('packages.json');
+    if (saved) return saved;
     this.seeding ??= this.seed().then((packages) => {
       const data: PackagesFile = { version: 1, packages };
-      writeJsonSync(this.file, data);
-      this.cache = data;
+      this.docs.write('packages.json', data);
+      return data;
     });
-    await this.seeding;
-    return this.cache!;
+    try {
+      return structuredClone(await this.seeding);
+    } finally {
+      this.seeding = undefined;
+    }
   }
 
   /** Sorted by order, then name. */
@@ -229,8 +229,7 @@ export class PackageStore {
   }
 
   private write(next: PackagesFile): void {
-    writeJsonSync(this.file, next);
-    this.cache = next;
+    this.docs.write('packages.json', next);
   }
 }
 

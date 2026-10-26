@@ -165,3 +165,11 @@ details.action[open] > summary { margin-bottom: 8px; }
 .pkg-save { position: sticky; bottom: 0; z-index: 5; display: flex; gap: 10px; flex-wrap: wrap; padding: 14px 0; background: linear-gradient(transparent, var(--canvas) 30%); }
 .danger-zone { margin-top: 28px; border-color: #e6c3b4; }
 .pkg-form .panel + .panel { margin-top: 0; }
+
+/* A warning under a settings section (e.g. M-Pesa can't call the site back). */
+.hint--warn {
+  padding: 0.6rem 0.8rem;
+  border-left: 3px solid #b5651d;
+  background: #f6e7d3;
+  color: #4a2d0f;
+}

@@ -1,9 +1,11 @@
+import type { APIContext, MiddlewareNext } from 'astro';
 import { defineMiddleware } from 'astro:middleware';
 import { readSessionValue, SESSION_COOKIE } from '@/lib/admin/session';
 import { passwordVersion } from '@/lib/admin/users';
 import { sameOrigin } from '@/lib/admin/web';
 import { getRuntime } from '@/lib/server/payments';
 import { clientIp } from '@/lib/server/client-ip';
+import { beginRequest, endRequest } from '@/lib/storage/docs';
 
 const OPEN_ADMIN_PAGES = ['/admin/login', '/admin/setup'];
 
@@ -18,6 +20,16 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     return next();
   }
   ctx.locals.ip = clientIp(ctx);
+  // Load saved data for this request (Redis on Vercel) and make sure every change is saved before replying.
+  await beginRequest();
+  try {
+    return await guard(ctx, next);
+  } finally {
+    await endRequest();
+  }
+});
+
+async function guard(ctx: APIContext, next: MiddlewareNext): Promise<Response> {
   const path = ctx.url.pathname;
   const adminPage = path === '/admin' || path.startsWith('/admin/');
   const adminApi = path.startsWith('/api/admin/');
@@ -56,4 +68,4 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     for (const [k, v] of Object.entries(headers)) copy.headers.set(k, v);
     return copy;
   }
-});
+}

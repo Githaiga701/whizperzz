@@ -5,8 +5,8 @@ import { uploadsDir } from '@/lib/server/packages';
 export const prerender = false;
 
 /** Photos uploaded in the admin (saved in the data folder). */
-export const GET: APIRoute = ({ params }) => {
-  const img = readImage(uploadsDir(), params['file'] ?? '');
+export const GET: APIRoute = async ({ params }) => {
+  const img = await readImage(uploadsDir(), params['file'] ?? '');
   if (!img) return new Response('Not found', { status: 404 });
   return new Response(new Uint8Array(img.body), {
     headers: {

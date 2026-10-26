@@ -42,7 +42,7 @@ If everyone forgets their password, open `/admin/setup/?recover=1` on the server
 
 **On your cPanel hosting (tours.whizperzpizza.co.ke):** follow [DEPLOY_CPANEL.md](DEPLOY_CPANEL.md). Double-click **Make cPanel upload.bat** to build the file you upload.
 
-**On Vercel (previews only):** the Vercel project's Root Directory must be `site`. The build picks the Vercel adapter by itself. Vercel can't keep files, so journeys, quotes, users and settings saved there are wiped every few minutes. Use it to show people the design, not to take real bookings or payments.
+**On Vercel:** the Vercel project's Root Directory must be `site`. The build picks the Vercel adapter by itself. Vercel can't keep files, so add a database: in the project open **Storage → Create database → Upstash (Redis)** and connect it to the project, then redeploy. Journeys, quotes, payments, users, settings and photos are then saved in Redis. Without it, nothing is kept for long, and the admin and payments won't work reliably.
 
 **On other hosts:**
 

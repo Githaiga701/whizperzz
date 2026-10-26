@@ -271,6 +271,41 @@ function markFailed(q: Quote, paymentId: string, reason: string, at: Date, flag?
 
 /* ---------- M-Pesa ---------- */
 
+const LOCAL_URL = /^https?:\/\/(localhost|127\.|0\.0\.0\.0|\[::1\])/i;
+
+/**
+ * Safaricom must be able to call the site back, so the callback needs a public https address.
+ * Returns what's wrong, or undefined. (Local addresses are fine when M-Pesa itself is a local test server.)
+ */
+export function mpesaCallbackProblem(config: PaymentConfig): string | undefined {
+  const m = config.mpesa;
+  if (!m || LOCAL_URL.test(m.baseUrl)) return undefined;
+  if (LOCAL_URL.test(m.callbackUrl) || !m.callbackUrl.startsWith('https://')) {
+    return `Site address is ${config.siteUrl}, which Safaricom can't reach`;
+  }
+  return undefined;
+}
+
+/** Turns Safaricom's error into a plain explanation and what to change in Settings. */
+export function explainMpesaError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("safaricom can't reach")) {
+    return 'The site address isn’t public. Set Settings → Site address to the live https address (e.g. https://tours.whizperzpizza.co.ke).';
+  }
+  if (m.includes('callback')) return 'Safaricom rejected the callback address. Check Settings → Site address is the live https address.';
+  if (m.includes('access token') || m.includes('invalid credentials') || m.includes('oauth') || m.includes('401') || m.includes('consumer')) {
+    return 'Safaricom didn’t accept the consumer key and secret. Re-copy them from the Daraja app, and check sandbox keys are used with Sandbox (live keys with Live).';
+  }
+  if (m.includes('merchant does not exist') || m.includes('shortcode') || m.includes('partyb') || m.includes('passkey') || m.includes('password') || m.includes('500.001.1001')) {
+    return 'The shortcode, passkey or till number don’t match. In sandbox use shortcode 174379 with Daraja’s test passkey and leave the till number empty.';
+  }
+  if (m.includes('phone') || m.includes('partya')) return 'Safaricom didn’t accept the phone number. It must be a Safaricom line.';
+  if (m.includes('could not reach') || m.includes('timeout') || m.includes('aborted') || m.includes('fetch failed')) {
+    return 'The server couldn’t connect to Safaricom (network or Safaricom outage). Try again; if it keeps happening, ask the host whether outgoing connections are allowed.';
+  }
+  return 'See Safaricom’s message for details.';
+}
+
 export async function startMpesa(deps: PaymentDeps, ref: unknown, phoneInput: unknown): Promise<{ message: string }> {
   const quote = await requireQuote(deps, ref);
   requirePayable(quote);
@@ -290,9 +325,15 @@ export async function startMpesa(deps: PaymentDeps, ref: unknown, phoneInput: un
 
   let res;
   try {
+    const unreachable = mpesaCallbackProblem(deps.config);
+    if (unreachable) throw new Error(unreachable);
     res = await deps.daraja.stkPush({ phone, amount: quote.amountKes, accountReference: quote.ref, description: 'Whizperz trip' });
   } catch (err) {
-    deps.log('error', 'STK push failed', { ref: quote.ref, error: (err as Error).message });
+    const said = (err as Error).message;
+    const why = explainMpesaError(said);
+    deps.log('error', 'STK push failed', { ref: quote.ref, error: said, why });
+    // Shown on the quote's page in the admin, so the reason can be seen without reading server logs.
+    await deps.store.update(quote.ref, (q) => addHistory(q, now, 'system', `M-Pesa prompt not sent. ${why} (Safaricom: ${said.slice(0, 200)})`));
     throw new PaymentError(502, 'provider_error', 'We couldn’t reach M-Pesa just now. Please try again in a minute.');
   }
 

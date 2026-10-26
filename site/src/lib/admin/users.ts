@@ -1,6 +1,6 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { join } from 'node:path';
-import { readJsonSync, writeJsonSync } from '@/lib/files';
+import { docsFor, type DocStore } from '@/lib/storage/docs';
 
 export interface AdminUser {
   username: string;
@@ -60,20 +60,19 @@ const DUMMY_HASH = hashPassword(randomBytes(12).toString('hex'));
 
 export class UserStore {
   readonly file: string;
-  private cache: UsersFile | undefined;
+  private readonly docs: DocStore;
 
   constructor(dataDir: string) {
     this.file = join(dataDir, 'users.json');
+    this.docs = docsFor(dataDir);
   }
 
   private load(): UsersFile {
-    if (!this.cache) this.cache = readJsonSync<UsersFile>(this.file) ?? { users: [] };
-    return this.cache;
+    return this.docs.read<UsersFile>('users.json') ?? { users: [] };
   }
 
   private save(next: UsersFile): void {
-    writeJsonSync(this.file, next, { private: true });
-    this.cache = next;
+    this.docs.write('users.json', next, { private: true });
   }
 
   hasUsers(): boolean {

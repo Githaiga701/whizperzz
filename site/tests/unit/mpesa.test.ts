@@ -174,3 +174,25 @@ describe('friendlyResult', () => {
     expect(friendlyResult(9999, '')).toMatch(/did not go through/);
   });
 });
+
+describe('explaining M-Pesa failures', async () => {
+  const { explainMpesaError, mpesaCallbackProblem } = await import('@/lib/payments/service');
+  const { loadPaymentConfig } = await import('@/lib/payments/config');
+  const keys = { MPESA_CONSUMER_KEY: 'k', MPESA_CONSUMER_SECRET: 's', MPESA_SHORTCODE: '174379', MPESA_PASSKEY: 'p', MPESA_CALLBACK_SECRET: 'cb' };
+
+  it('flags a site address Safaricom cannot reach', () => {
+    expect(mpesaCallbackProblem(loadPaymentConfig({ ...keys }))).toMatch(/localhost:4321/);
+    expect(mpesaCallbackProblem(loadPaymentConfig({ ...keys, SITE_URL: 'http://tours.example.com' }))).toBeTruthy();
+    expect(mpesaCallbackProblem(loadPaymentConfig({ ...keys, SITE_URL: 'https://tours.example.com' }))).toBeUndefined();
+    // A local fake M-Pesa (the tests) can call a local site.
+    expect(mpesaCallbackProblem(loadPaymentConfig({ ...keys, MPESA_BASE_URL: 'http://127.0.0.1:9' }))).toBeUndefined();
+  });
+
+  it('turns Safaricom errors into what to fix', () => {
+    expect(explainMpesaError("Site address is http://localhost:4321, which Safaricom can't reach")).toMatch(/Site address/);
+    expect(explainMpesaError('mpesa error: Invalid Access Token')).toMatch(/consumer key and secret/);
+    expect(explainMpesaError('mpesa error: Bad Request - Invalid CallBackURL')).toMatch(/callback address/);
+    expect(explainMpesaError('mpesa error: Merchant does not exist')).toMatch(/shortcode, passkey/);
+    expect(explainMpesaError('Could not reach mpesa: fetch failed')).toMatch(/couldn’t connect/);
+  });
+});

@@ -1143,3 +1143,10 @@ body { top: 0 !important; }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   .whisper--typing blockquote .ch { opacity: 1; }
 }
+
+/* The M-Pesa or card receipt number, on its own line under the payment message. */
+.pay-receipt {
+  display: block;
+  margin-top: 0.35rem;
+  font-weight: 600;
+}

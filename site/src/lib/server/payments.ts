@@ -9,6 +9,8 @@ import { UserStore } from '@/lib/admin/users';
 import { loadSessionKey } from '@/lib/admin/session';
 import { createMailer, type Mailer } from '@/lib/email/mailer';
 import { createNotifier } from '@/lib/email/notifier';
+import { onSettingsChanged, usingRedis } from '@/lib/storage/docs';
+import { redisQuoteRecords } from '@/lib/storage/redis-quotes';
 
 /** One JSON line per event, without secrets. Most hosts collect stdout as logs. */
 export const log: LogFn = (level, message, data) => {
@@ -38,11 +40,13 @@ let override: PaymentDeps | undefined;
 
 function getBase() {
   if (!base) {
-    // On Vercel only /tmp is writable, and it is wiped often: fine for a preview, not for real bookings.
+    // With Upstash Redis set up (Vercel), everything is saved there and the data folder isn't used.
+    // Without it, Vercel only allows /tmp, which is wiped often: fine for a look around, not for bookings.
     const dataDir = process.env['DATA_DIR']?.trim() || (process.env['VERCEL'] ? '/tmp/whizperz-data' : './data');
+    if (process.env['VERCEL'] && !usingRedis()) log('warn', 'No Upstash Redis found: bookings and settings will not be kept. Add Upstash in Vercel → Storage.');
     base = {
       dataDir,
-      store: new QuoteStore(filePersistence(dataDir)),
+      store: new QuoteStore(usingRedis() ? redisQuoteRecords() : filePersistence(dataDir)),
       settings: new SettingsStore(dataDir),
       users: new UserStore(dataDir),
       sessionKey: loadSessionKey(dataDir),
@@ -87,6 +91,9 @@ export function getPaymentDeps(): PaymentDeps {
 export function reloadRuntime(): void {
   runtime = undefined;
 }
+
+// Another copy of the site (Vercel runs several) saved new settings: rebuild the payment setup here too.
+onSettingsChanged(reloadRuntime);
 
 /** Lets tests swap in fake providers and an in-memory store. */
 export function setPaymentDeps(next: PaymentDeps | undefined): void {

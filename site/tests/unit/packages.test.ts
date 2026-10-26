@@ -176,11 +176,11 @@ describe('photo uploads', () => {
     expect(detectImage(new Uint8Array())).toBeUndefined();
   });
 
-  it('saves a photo and serves it back', () => {
+  it('saves a photo and serves it back', async () => {
     const dir = tempDir();
     const url = saveImage(dir, png, 'Wild To/Blue');
     expect(url).toMatch(/^\/media\/wildtoblue-[0-9a-f]{8}\.png$/);
-    const img = readImage(dir, url.replace('/media/', ''))!;
+    const img = (await readImage(dir, url.replace('/media/', '')))!;
     expect(img.type).toBe('image/png');
     expect([...img.body]).toEqual([...png]);
   });
@@ -194,13 +194,13 @@ describe('photo uploads', () => {
     expect(() => saveImage(dir, big, 'x')).toThrow('under 5 MB');
   });
 
-  it('only serves files it named itself', () => {
+  it('only serves files it named itself', async () => {
     const dir = tempDir();
     writeFileSync(join(dir, 'secret.json'), '{}');
     for (const name of ['../packages.json', 'secret.json', '..%2Fx.jpg', 'a/b.jpg', 'UPPER.jpg', 'x.svg', '']) {
-      expect(readImage(dir, name), name).toBeUndefined();
+      expect(await readImage(dir, name), name).toBeUndefined();
     }
-    expect(readImage(dir, 'missing-1234.jpg')).toBeUndefined();
+    expect(await readImage(dir, 'missing-1234.jpg')).toBeUndefined();
   });
 });
 
