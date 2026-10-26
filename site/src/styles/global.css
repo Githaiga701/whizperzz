@@ -423,6 +423,14 @@ body { top: 0 !important; }
   color: var(--muted);
 }
 .whisper--typing blockquote .ch { opacity: 0; }
+/* Rotating notes: the longest note, invisible, holds the card's size so it never jumps. */
+.note-stack { display: grid; }
+.note-stack > * { grid-area: 1 / 1; }
+.note-sizer { visibility: hidden; }
+.note-cycle figcaption { transition: opacity 0.4s; }
+.note-cycle.is-turning figcaption { opacity: 0; }
+.motion .note-cycle.is-turning { animation: note-nudge 0.45s ease-in-out; }
+@keyframes note-nudge { 50% { transform: rotate(calc(var(--tilt, 0deg) - 1deg)) translateY(-2px); } }
 .whisper--typing blockquote .ch.on { opacity: 1; transition: opacity 0.12s; }
 
 /* ---------- Intro ---------- */
@@ -1142,11 +1150,4 @@ body { top: 0 !important; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   .whisper--typing blockquote .ch { opacity: 1; }
-}
-
-/* The M-Pesa or card receipt number, on its own line under the payment message. */
-.pay-receipt {
-  display: block;
-  margin-top: 0.35rem;
-  font-weight: 600;
 }

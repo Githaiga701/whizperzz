@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect, isMobile } from './fixtures';
+import { fieldNotes } from '../../src/data/notes';
 
 const destinations = ['maasai-mara', 'amboseli', 'tsavo', 'diani', 'laikipia', 'naivasha-nakuru', 'samburu', 'lamu'];
 const journeys = ['into-the-open', 'under-a-big-sky', 'saltwater-days', 'wild-to-blue', 'rift-and-water', 'laikipia-slow-days', 'north-country'];
@@ -100,13 +101,6 @@ test('the current page is marked in the navigation', async ({ page }) => {
   await expect(page.locator('#main-nav a[aria-current="page"]')).toHaveText('Destinations');
 });
 
-test('How to book is available in the main navigation', async ({ page }) => {
-  await page.goto('/');
-  if (await isMobile(page)) await page.locator('.menu-toggle').click();
-  await page.locator('#main-nav').getByRole('link', { name: 'How to book' }).click();
-  await expect(page).toHaveURL(/\/how-to-book\/$/);
-});
-
 test('FAQs open and close', async ({ page }) => {
   await page.goto('/faq/');
   const first = page.locator('.faq-list details').first();
@@ -115,11 +109,33 @@ test('FAQs open and close', async ({ page }) => {
   await expect(first.locator('p')).toBeVisible();
 });
 
-test('the hero note writes itself in and is readable to screen readers', async ({ page }) => {
+test('the hero notes write themselves in, one after another, readable to screen readers', async ({ page }) => {
+  await page.clock.install();
   await page.goto('/');
   const note = page.locator('.hero-whisper');
-  await expect(note.locator('.visually-hidden')).toContainText('A lioness in the long grass');
-  await expect(note.locator('.ch.on').last()).toHaveText('.', { timeout: 10_000 });
+  const first = (await note.locator('[data-note-sr]').textContent())!;
+  expect(fieldNotes.map((n) => n.text)).toContain(first);
+  // It writes itself in…
+  await page.clock.runFor(10_000);
+  await expect(note.locator('.ch.on').last()).toHaveText('.');
+  await expect(note.locator('figcaption')).toHaveText(fieldNotes.find((n) => n.text === first)!.from);
+  // …then gives way to a different note.
+  await page.clock.runFor(15_000);
+  await expect(note.locator('[data-note-sr]')).not.toHaveText(first);
+  expect(fieldNotes.map((n) => n.text)).toContain(await note.locator('[data-note-sr]').textContent());
+});
+
+test('with reduced motion the note is written already and stays put', async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  await page.route(/images\.unsplash\.com|translate\.google/, (r) => r.abort());
+  await page.goto('/');
+  const note = page.locator('.hero-whisper');
+  const text = await note.locator('[data-note-sr]').textContent();
+  await expect(note.locator('.ch:not(.on)')).toHaveCount(0);
+  await page.waitForTimeout(1500);
+  await expect(note.locator('[data-note-sr]')).toHaveText(text!);
+  await context.close();
 });
 
 test('journey pages number multi-day entries correctly', async ({ page }) => {

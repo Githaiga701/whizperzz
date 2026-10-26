@@ -1,0 +1,121 @@
+---
+import type { FieldNote } from '@/data/notes';
+
+/**
+ * A handwritten note that writes itself in, rests, rubs itself out and makes way for the next one.
+ * The first note is chosen on the server, so the card is never empty (and works without JavaScript).
+ * People who ask for less motion get one note, already written, that doesn't change.
+ */
+interface Props {
+  notes: FieldNote[];
+  tilt?: number;
+  class?: string;
+}
+
+const { notes, tilt = 2, class: className } = Astro.props;
+const start = Math.floor(Math.random() * notes.length);
+const first = notes[start]!;
+const longest = notes.reduce((a, b) => (b.text.length > a.text.length ? b : a), first);
+---
+
+<figure class:list={['whisper', 'whisper--typing', 'note-cycle', className]} style={`--tilt:${tilt}deg`} data-note-cycle data-start={start}>
+  <blockquote>
+    <span class="visually-hidden" data-note-sr>{first.text}</span>
+    <span class="note-stack" aria-hidden="true">
+      <span class="note-sizer">{longest.text}</span>
+      <span class="note-text" data-note-text>{[...first.text].map((c) => <span class="ch">{c}</span>)}</span>
+    </span>
+  </blockquote>
+  <figcaption data-note-from>{first.from}</figcaption>
+  <script type="application/json" data-note-pool set:html={JSON.stringify(notes).replace(/</g, '\\u003c')} />
+</figure>
+
+<script>
+  interface Note {
+    text: string;
+    from: string;
+  }
+
+  const fig = document.querySelector<HTMLElement>('[data-note-cycle]');
+  if (fig) {
+    const pool = JSON.parse(fig.querySelector('[data-note-pool]')!.textContent ?? '[]') as Note[];
+    const textEl = fig.querySelector<HTMLElement>('[data-note-text]')!;
+    const srEl = fig.querySelector<HTMLElement>('[data-note-sr]')!;
+    const fromEl = fig.querySelector<HTMLElement>('[data-note-from]')!;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const chars = () => [...textEl.querySelectorAll<HTMLElement>('.ch')];
+    const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
+
+    // Pause while the card is off screen or the tab is hidden, so nothing runs that nobody sees.
+    let visible = true;
+    let paused = false;
+    new IntersectionObserver((entries) => (visible = entries.some((e) => e.isIntersecting))).observe(fig);
+    fig.addEventListener('pointerenter', () => (paused = true));
+    fig.addEventListener('pointerleave', () => (paused = false));
+    fig.addEventListener('focusin', () => (paused = true));
+    fig.addEventListener('focusout', () => (paused = false));
+    const waitUntilShown = async () => {
+      while (document.hidden || !visible || paused) await sleep(400);
+    };
+
+    async function write() {
+      for (const c of chars()) {
+        await waitUntilShown();
+        c.classList.add('on');
+        await sleep(/[.,]/.test(c.textContent ?? '') ? 260 : 34);
+      }
+    }
+
+    async function rubOut() {
+      const list = chars().reverse();
+      for (const c of list) {
+        c.classList.remove('on');
+        await sleep(9);
+      }
+    }
+
+    function show(note: Note) {
+      textEl.replaceChildren(
+        ...[...note.text].map((ch) => {
+          const s = document.createElement('span');
+          s.className = 'ch';
+          s.textContent = ch;
+          return s;
+        }),
+      );
+      srEl.textContent = note.text;
+      fromEl.textContent = note.from;
+    }
+
+    if (reduce || pool.length < 2) {
+      chars().forEach((c) => c.classList.add('on'));
+    } else {
+      // A shuffled order that starts after the note the server picked, so nothing repeats until all have shown.
+      const startAt = Number(fig.dataset['start'] ?? 0);
+      const rest = pool.filter((_, i) => i !== startAt);
+      for (let i = rest.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [rest[i], rest[j]] = [rest[j]!, rest[i]!];
+      }
+      const order = [pool[startAt]!, ...rest];
+      (async () => {
+        await sleep(700);
+        for (let i = 0; ; i++) {
+          if (i > 0) {
+            await waitUntilShown();
+            await rubOut();
+            fig.classList.add('is-turning');
+            await sleep(450);
+            show(order[i % order.length]!);
+            fig.classList.remove('is-turning');
+            await sleep(250);
+          }
+          await write();
+          await sleep(6500);
+          await waitUntilShown();
+        }
+      })();
+    }
+  }
+</script>

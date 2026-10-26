@@ -1,6 +1,7 @@
 ---
 import Base from '@/layouts/Base.astro';
-import Whisper from '@/components/Whisper.astro';
+import NoteCycle from '@/components/NoteCycle.astro';
+import { fieldNotes } from '@/data/notes';
 import KenyaMap from '@/components/KenyaMap.astro';
 import JourneyCard from '@/components/JourneyCard.astro';
 import TripSketcher from '@/components/TripSketcher.astro';
@@ -34,13 +35,7 @@ const marquee = destinations.map((d) => d.data.name);
         </g>
       ))}
     </svg>
-    <Whisper
-      class="hero-whisper"
-      text="6:10am, the Mara. A lioness in the long grass, forty metres out. Nobody in the vehicle said a word."
-      from="Notes from one of our guides"
-      tilt={2}
-      typing
-    />
+    <NoteCycle class="hero-whisper" notes={fieldNotes} tilt={2} />
     <div class="wrap">
       <h1 class="hero-title" aria-label={headline.join(' ')}>
         {headline.map((w, i) => (
