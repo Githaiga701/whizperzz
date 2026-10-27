@@ -1,9 +1,9 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-export type Provider = 'mpesa' | 'pesapal' | 'ipos' | 'unipesa' | 'crypto' | 'manual';
+export type Provider = 'mpesa' | 'pesapal' | 'ipos' | 'unipesa' | 'crypto' | 'paystack' | 'manual';
 /** Payment services that send the guest to their own checkout page and tell us the result afterwards. */
-export type GatewayId = 'ipos' | 'unipesa' | 'crypto';
+export type GatewayId = 'ipos' | 'unipesa' | 'crypto' | 'paystack';
 export type QuoteStatus = 'awaiting_payment' | 'paid' | 'cancelled' | 'refunded';
 export type PaymentStatus = 'pending' | 'paid' | 'failed';
 export type RefundStatus = 'requested' | 'completed' | 'failed';

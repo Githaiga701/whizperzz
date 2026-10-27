@@ -10,7 +10,8 @@ import { SMTPServer } from 'smtp-server';
 import { simpleParser } from 'mailparser';
 import { unipesaSign, verifyUnipesa } from '../../src/lib/payments/gateways/unipesa';
 import { nowPaymentsSignature } from '../../src/lib/payments/gateways/nowpayments';
-import { E2E_IPOS, E2E_NOWPAYMENTS, E2E_UNIPESA } from './env';
+import { paystackSignature } from '../../src/lib/payments/gateways/paystack';
+import { E2E_IPOS, E2E_NOWPAYMENTS, E2E_PAYSTACK, E2E_UNIPESA } from './env';
 
 const PORT = Number(process.env['MOCK_PORT'] ?? 4398);
 const SMTP_PORT = Number(process.env['MOCK_SMTP_PORT'] ?? 4397);
@@ -385,6 +386,58 @@ const server = createServer(async (req, res) => {
       if (req.headers['x-api-key'] !== E2E_NOWPAYMENTS.apiKey) return send(res, 403, { message: 'Invalid api key' });
       return send(res, 200, { selectedCurrencies: ['usdttrc20', 'btc', 'eth'] });
     }
+
+    /* ---- Paystack ---- */
+    if (path.startsWith('/paystack/transaction')) {
+      if (req.headers['authorization'] !== `Bearer ${E2E_PAYSTACK.secretKey}`) return send(res, 401, { status: false, message: 'Invalid key' });
+    }
+    if (path === '/paystack/transaction/initialize' && req.method === 'POST') {
+      const b = await readBody(req);
+      const ref = String(b['reference'] ?? '');
+      if (!/^[A-Za-z0-9.=-]+$/.test(ref)) return send(res, 400, { status: false, message: 'Invalid reference' });
+      if (hosted.has(`ps:${ref}`)) return send(res, 400, { status: false, message: 'Duplicate Transaction Reference' });
+      if (!Number.isInteger(b['amount']) || b['currency'] !== 'KES' || !String(b['email'] ?? '').includes('@')) return send(res, 400, { status: false, message: 'Invalid amount, currency or email' });
+      const meta = (b['metadata'] ?? {}) as Record<string, unknown>;
+      hosted.set(`ps:${ref}`, {
+        id: `ps:${ref}`, ref, amount: Number(b['amount']), currency: 'KES', returnUrl: String(b['callback_url']), notifyUrl: '', status: 'pending',
+        extra: { txn: String(7000 + ++counter), cancel: String(meta['cancel_action'] ?? b['callback_url']), state: 'abandoned' },
+      });
+      return send(res, 200, { status: true, message: 'Authorization URL created', data: { authorization_url: `http://127.0.0.1:${PORT}/paystack/checkout?t=${encodeURIComponent(ref)}`, access_code: `ac_${counter}`, reference: ref } });
+    }
+    const paystackTxn = (h: HostedPayment) => ({
+      id: Number(h.extra['txn']), status: h.extra['state'], reference: h.ref, amount: h.amount, currency: h.currency,
+      gateway_response: h.extra['state'] === 'success' ? 'Approved' : h.extra['state'] === 'failed' ? 'Declined' : 'The transaction was not completed',
+      channel: 'card', paid_at: h.extra['state'] === 'success' ? new Date().toISOString() : null,
+      authorization: h.extra['state'] === 'success' ? { brand: 'visa', last4: '4081', channel: 'card' } : null,
+    });
+    if (path === '/paystack/checkout') {
+      const h = hosted.get(`ps:${url.searchParams.get('t') ?? ''}`);
+      if (!h) return send(res, 404, 'Unknown transaction', 'text/plain');
+      const t = encodeURIComponent(h.ref);
+      return send(res, 200, page('Mock Paystack checkout', `<p>KES ${(h.amount / 100).toFixed(2)}</p><form method="post" action="/paystack/checkout/done?t=${t}&how=pay"><button>Pay</button></form><form method="post" action="/paystack/checkout/done?t=${t}&how=decline"><button>Decline</button></form><form method="post" action="/paystack/checkout/done?t=${t}&how=cancel"><button>Cancel payment</button></form>`), 'text/html');
+    }
+    if (path === '/paystack/checkout/done' && req.method === 'POST') {
+      const h = hosted.get(`ps:${url.searchParams.get('t') ?? ''}`);
+      if (!h) return send(res, 404, 'Unknown transaction', 'text/plain');
+      const how = url.searchParams.get('how');
+      if (how === 'cancel') return redirect(res, h.extra['cancel']!);
+      h.extra['state'] = how === 'decline' ? 'failed' : 'success';
+      if (how === 'pay') {
+        const raw = JSON.stringify({ event: 'charge.success', data: paystackTxn(h) });
+        const hook = process.env['MOCK_PAYSTACK_WEBHOOK_URL'];
+        if (hook) setTimeout(() => void postRaw(hook, raw, { 'x-paystack-signature': paystackSignature(raw, E2E_PAYSTACK.secretKey) }), 300);
+      }
+      const back = new URL(h.returnUrl);
+      back.searchParams.set('trxref', h.ref);
+      back.searchParams.set('reference', h.ref);
+      return redirect(res, back.toString());
+    }
+    if (path.startsWith('/paystack/transaction/verify/')) {
+      const h = hosted.get(`ps:${decodeURIComponent(path.split('/').pop() ?? '')}`);
+      if (!h) return send(res, 400, { status: false, message: 'Transaction reference not found' });
+      return send(res, 200, { status: true, message: 'Verification successful', data: paystackTxn(h) });
+    }
+    if (path === '/paystack/transaction') return send(res, 200, { status: true, message: 'Transactions retrieved', data: [] });
 
     /* ---- Mail the site sent (read by the tests) ---- */
     if (path === '/mails') return send(res, 200, mails);

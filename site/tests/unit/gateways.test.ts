@@ -366,7 +366,7 @@ describe('paying through a hosted gateway', () => {
 
   it('offers every method that is switched on', async () => {
     const { deps, quote } = await setup();
-    expect(viewQuote(deps, (await deps.store.get(quote.ref))!).methods).toEqual({ mpesa: true, card: true, ipos: true, unipesa: false, crypto: false });
+    expect(viewQuote(deps, (await deps.store.get(quote.ref))!).methods).toEqual({ mpesa: true, card: true, ipos: true, unipesa: false, crypto: false, paystack: false });
   });
 });
 

@@ -8,4 +8,5 @@ export const MOCK_SMTP_PORT = 4397;
 export const E2E_UNIPESA = { merchantId: 'e2e-merchant', secretKey: 'e2e-unipesa-secret' };
 export const E2E_NOWPAYMENTS = { apiKey: 'e2e-np-key', ipnSecret: 'e2e-np-ipn-secret' };
 export const E2E_IPOS = { tpn: '139322815010', apiKey: 'e2e-ipos-key', secretKey: 'e2e-ipos-secret' };
+export const E2E_PAYSTACK = { secretKey: 'sk_test_e2epaystack000000000001' };
 export const E2E_USD_RATE = 130;

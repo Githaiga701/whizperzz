@@ -78,6 +78,15 @@ const envSchema = z.object({
   /** Unipesa's transaction status address, if they give you one. Used to double-check payments. */
   UNIPESA_STATUS_URL: blank,
 
+  /** Paystack secret key: sk_test_… while testing, sk_live_… when live. */
+  PAYSTACK_SECRET_KEY: blank,
+  PAYSTACK_CALLBACK_SECRET: blank,
+  /** Optional: which payment options Paystack's page shows, e.g. "card,mobile_money". Empty shows all you've switched on. */
+  PAYSTACK_CHANNELS: blank,
+  /** Optional allow-list of the IP addresses Paystack sends webhooks from. */
+  PAYSTACK_CALLBACK_IPS: blank,
+  PAYSTACK_BASE_URL: blank,
+
   NOWPAYMENTS_ENV: z.enum(['sandbox', 'production']).optional(),
   NOWPAYMENTS_API_KEY: blank,
   NOWPAYMENTS_IPN_SECRET: blank,
@@ -138,6 +147,17 @@ export interface UnipesaConfig {
   notifyUrl: string;
 }
 
+export interface PaystackConfig {
+  baseUrl: string;
+  secretKey: string;
+  /** True for an sk_test_ key: no real money moves. */
+  testKey: boolean;
+  channels: string[];
+  callbackIps: string[];
+  callbackSecret: string;
+  notifyUrl: string;
+}
+
 export interface NowPaymentsConfig {
   baseUrl: string;
   apiKey: string;
@@ -158,6 +178,7 @@ export interface PaymentConfig {
   ipos: IposConfig | undefined;
   unipesa: UnipesaConfig | undefined;
   crypto: NowPaymentsConfig | undefined;
+  paystack: PaystackConfig | undefined;
   /** Human-readable reasons a provider is switched off. Logged once at start-up. */
   warnings: string[];
 }
@@ -174,6 +195,11 @@ export const IPOS_URLS = {
 } as const;
 
 export const UNIPESA_HPP_URL = 'https://hpp.unipesa.tech';
+
+export const PAYSTACK_API_URL = 'https://api.paystack.co';
+
+/** Payment options Paystack's page can show for Kenyan businesses. */
+export const PAYSTACK_CHANNELS = ['card', 'mobile_money', 'bank_transfer', 'apple_pay'] as const;
 
 export const NOWPAYMENTS_URLS = {
   sandbox: 'https://api-sandbox.nowpayments.io/v1',
@@ -333,6 +359,31 @@ export function loadPaymentConfig(raw: Record<string, string | undefined>): Paym
     warnings.push(`Crypto (NOWPayments) is off. Missing: ${cryptoMissing.join(', ')}.`);
   }
 
+  let paystack: PaystackConfig | undefined;
+  const paystackMissing = missing([
+    ['PAYSTACK_SECRET_KEY', env.PAYSTACK_SECRET_KEY],
+    ['PAYSTACK_CALLBACK_SECRET', env.PAYSTACK_CALLBACK_SECRET],
+  ]);
+  if (paystackMissing.length === 0) {
+    const testKey = env.PAYSTACK_SECRET_KEY!.startsWith('sk_test_');
+    if (mode === 'production' && testKey) warnings.push('Paystack has a test key (sk_test_…) while payments are live. Guests can’t really pay with it.');
+    if (mode === 'sandbox' && env.PAYSTACK_SECRET_KEY!.startsWith('sk_live_')) warnings.push('Paystack has a live key (sk_live_…) while payments are in sandbox mode. Real money will move.');
+    paystack = {
+      baseUrl: (env.PAYSTACK_BASE_URL ?? PAYSTACK_API_URL).replace(/\/+$/, ''),
+      secretKey: env.PAYSTACK_SECRET_KEY!,
+      testKey,
+      channels: (env.PAYSTACK_CHANNELS ?? '')
+        .split(/[\s,]+/)
+        .map((c) => c.toLowerCase())
+        .filter((c): c is string => (PAYSTACK_CHANNELS as readonly string[]).includes(c)),
+      callbackIps: (env.PAYSTACK_CALLBACK_IPS ?? '').split(/[\s,]+/).filter(Boolean),
+      callbackSecret: env.PAYSTACK_CALLBACK_SECRET!,
+      notifyUrl: callback('paystack', env.PAYSTACK_CALLBACK_SECRET!),
+    };
+  } else if (env.PAYSTACK_SECRET_KEY) {
+    warnings.push(`Paystack is off. Missing: ${paystackMissing.join(', ')}.`);
+  }
+
   return {
     mode,
     siteUrl,
@@ -344,6 +395,7 @@ export function loadPaymentConfig(raw: Record<string, string | undefined>): Paym
     ipos,
     unipesa,
     crypto,
+    paystack,
     warnings,
   };
 }

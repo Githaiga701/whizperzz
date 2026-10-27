@@ -1,11 +1,12 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { E2E_ADMIN_TOKEN, E2E_NOWPAYMENTS, E2E_UNIPESA } from './env';
+import { E2E_ADMIN_TOKEN, E2E_NOWPAYMENTS, E2E_PAYSTACK, E2E_UNIPESA } from './env';
 import { unipesaSign } from '../../src/lib/payments/gateways/unipesa';
 import { nowPaymentsSignature } from '../../src/lib/payments/gateways/nowpayments';
+import { paystackSignature } from '../../src/lib/payments/gateways/paystack';
 
 /**
- * iPOS Pay, Unipesa and crypto (NOWPayments), end to end against fake versions of each service.
+ * Paystack, iPOS Pay, Unipesa and crypto (NOWPayments), end to end against fake versions of each service.
  * The site charges KES 85,000 = USD 653.85 at the test rate of 130 shillings per dollar.
  */
 
@@ -33,6 +34,58 @@ async function openGateway(page: Page, ref: string, form: string, button: string
   await f.locator('input[name="email"]').fill(email);
   await f.getByRole('button', { name: button }).click();
 }
+
+test.describe('Paystack', () => {
+  test('guest pays in shillings and comes back to a confirmed booking', async ({ page, request }) => {
+    const ref = await newQuote(request);
+    await openGateway(page, ref, 'paystack', 'Continue to Paystack');
+    await expect(page.locator('h1')).toHaveText('Mock Paystack checkout');
+    await expect(page.getByText('KES 85000.00')).toBeVisible();
+    await page.getByRole('button', { name: 'Pay', exact: true }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/pay/${ref}/\\?return=paystack`));
+    await expect(page.locator('h1')).toHaveText('All paid. Thank you!', { timeout: 15_000 });
+    await expect(page.locator('[data-pay-status]')).toContainText('Receipt: PSK-');
+    const q = await quoteJson(request, ref);
+    expect(q.payments[0]).toMatchObject({ provider: 'paystack', status: 'paid', charged: { amount: 85000, currency: 'KES' } });
+  });
+
+  test('a declined card shows why and lets the guest try again', async ({ page, request }) => {
+    const ref = await newQuote(request);
+    await openGateway(page, ref, 'paystack', 'Continue to Paystack');
+    await page.getByRole('button', { name: 'Decline' }).click();
+    await expect(page.locator('[data-pay-status]')).toContainText('Declined', { timeout: 15_000 });
+    await expect(page.locator('[data-pay-gateway="paystack"]')).toBeVisible();
+  });
+
+  test('cancelling on Paystack’s page brings the guest back to choose again', async ({ page, request }) => {
+    const ref = await newQuote(request);
+    await openGateway(page, ref, 'paystack', 'Continue to Paystack');
+    await page.getByRole('button', { name: 'Cancel payment' }).click();
+    await expect(page.locator('[data-pay-status]')).toContainText('nothing was charged');
+    await expect(page.locator('[data-pay-gateway="paystack"]')).toBeVisible();
+    expect((await quoteJson(request, ref)).status).toBe('awaiting_payment');
+  });
+
+  test('forged or unconfirmed webhooks are ignored', async ({ request }) => {
+    const ref = await newQuote(request);
+    const open = await request.post('/api/pay/gateway', { data: { ref, method: 'paystack', email: 'jane@example.com' } });
+    expect(open.status()).toBe(200);
+    const reference = new URL(((await open.json()) as { redirectUrl: string }).redirectUrl).searchParams.get('t')!;
+    const raw = JSON.stringify({ event: 'charge.success', data: { id: 1, status: 'success', reference, amount: 8_500_000, currency: 'KES' } });
+    const hook = (path: string, sig?: string) =>
+      request.post(path, { data: raw, headers: { 'content-type': 'application/json', ...(sig ? { 'x-paystack-signature': sig } : {}) } });
+
+    expect((await hook('/api/callbacks/paystack/wrong-secret', paystackSignature(raw, E2E_PAYSTACK.secretKey))).status()).toBe(404);
+    await hook('/api/callbacks/paystack/e2e-paystack-cb');
+    await hook('/api/callbacks/paystack/e2e-paystack-cb', paystackSignature(raw, 'sk_test_someone_else'));
+    // Correctly signed, but Paystack itself says the guest never finished paying, so it is not believed.
+    await hook('/api/callbacks/paystack/e2e-paystack-cb', paystackSignature(raw, E2E_PAYSTACK.secretKey));
+    const q = await quoteJson(request, ref);
+    expect(q.status).toBe('awaiting_payment');
+    expect(q.payments[0]).toMatchObject({ provider: 'paystack', status: 'pending' });
+  });
+});
 
 test.describe('iPOS Pay', () => {
   test('guest pays in dollars and comes back to a confirmed booking', async ({ page, request }) => {
@@ -154,6 +207,7 @@ test('online bookings can be paid with any method', async ({ request }) => {
   expect(made.status()).toBe(201);
   const travelDate = new Date(Date.now() + 40 * 86_400_000).toISOString().slice(0, 10);
   for (const [method, host] of [
+    ['paystack', '/paystack/checkout'],
     ['ipos', '/ipos/pay'],
     ['unipesa', '/unipesa/hpp'],
     ['crypto', '/nowpayments/pay'],

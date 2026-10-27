@@ -2,12 +2,13 @@ import type { PaymentConfig } from '../config';
 import type { FetchLike } from '../http';
 import { createIpos } from './ipos';
 import { createNowPayments } from './nowpayments';
+import { createPaystack } from './paystack';
 import { createUnipesa } from './unipesa';
 import type { Gateway, GatewayId } from './types';
 
 export type Gateways = Partial<Record<GatewayId, Gateway>>;
 
-export const GATEWAY_IDS: readonly GatewayId[] = ['ipos', 'unipesa', 'crypto'];
+export const GATEWAY_IDS: readonly GatewayId[] = ['ipos', 'unipesa', 'crypto', 'paystack'];
 
 /** The gateways whose settings are complete. */
 export function createGateways(config: PaymentConfig, fetchImpl: FetchLike = fetch): Gateways {
@@ -15,6 +16,7 @@ export function createGateways(config: PaymentConfig, fetchImpl: FetchLike = fet
   if (config.ipos) g.ipos = createIpos(config.ipos, fetchImpl);
   if (config.unipesa) g.unipesa = createUnipesa(config.unipesa, fetchImpl);
   if (config.crypto) g.crypto = createNowPayments(config.crypto, fetchImpl);
+  if (config.paystack) g.paystack = createPaystack(config.paystack, fetchImpl);
   return g;
 }
 

@@ -5,7 +5,7 @@ import { getPaymentDeps, handle, json, rateLimit, readJson } from '@/lib/server/
 
 export const prerender = false;
 
-/** Opens iPOS Pay, Unipesa or crypto checkout. Body: { ref, method: "ipos" | "unipesa" | "crypto", email?, phone? }. Returns { redirectUrl }. */
+/** Opens Paystack, iPOS Pay, Unipesa or crypto checkout. Body: { ref, method: "paystack" | "ipos" | "unipesa" | "crypto", email?, phone? }. Returns { redirectUrl }. */
 export const POST: APIRoute = ({ request, locals }) =>
   handle(async () => {
     rateLimit(`pay:${locals.ip}`, 20, 60_000);

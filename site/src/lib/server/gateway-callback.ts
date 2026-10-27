@@ -41,7 +41,7 @@ export function gatewayCallback(id: GatewayId): { POST: APIRoute; GET: APIRoute 
       return json(429, { error: 'rate_limited' });
     }
     const deps = getPaymentDeps();
-    const cfg = id === 'ipos' ? deps.config.ipos : id === 'unipesa' ? deps.config.unipesa : deps.config.crypto;
+    const cfg = deps.config[id];
     if (!cfg || !sameSecret(params['secret'], cfg.callbackSecret)) return json(404, { error: 'not_found' });
     const read = request.method === 'GET' ? { raw: '', body: Object.fromEntries(url.searchParams) as Record<string, unknown> } : await readBody(request);
     if (!read) return json(413, { error: 'too_large' });

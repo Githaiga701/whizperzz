@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { rmSync } from 'node:fs';
-import { E2E_ADMIN_TOKEN, E2E_IPOS, E2E_NOWPAYMENTS, E2E_UNIPESA, E2E_USD_RATE, MOCK_PORT, MOCK_SMTP_PORT, SITE_PORT } from './tests/e2e/env';
+import { E2E_ADMIN_TOKEN, E2E_IPOS, E2E_PAYSTACK, E2E_NOWPAYMENTS, E2E_UNIPESA, E2E_USD_RATE, MOCK_PORT, MOCK_SMTP_PORT, SITE_PORT } from './tests/e2e/env';
 
 /**
  * Browser tests run against the real built server (npm run build first; npm run test:e2e does both)
@@ -47,6 +47,9 @@ const siteEnv = {
   UNIPESA_SECRET_KEY: E2E_UNIPESA.secretKey,
   UNIPESA_CALLBACK_SECRET: 'e2e-unipesa-cb',
   UNIPESA_HPP_URL: `${mock}/unipesa/hpp`,
+  PAYSTACK_SECRET_KEY: E2E_PAYSTACK.secretKey,
+  PAYSTACK_CALLBACK_SECRET: 'e2e-paystack-cb',
+  PAYSTACK_BASE_URL: `${mock}/paystack`,
   NOWPAYMENTS_API_KEY: E2E_NOWPAYMENTS.apiKey,
   NOWPAYMENTS_IPN_SECRET: E2E_NOWPAYMENTS.ipnSecret,
   NOWPAYMENTS_CALLBACK_SECRET: 'e2e-crypto-cb',
@@ -81,7 +84,7 @@ export default defineConfig({
     {
       command: 'npx tsx tests/e2e/mock-providers.ts',
       url: `${mock}/health`,
-      env: { MOCK_PORT: String(MOCK_PORT), MOCK_SMTP_PORT: String(MOCK_SMTP_PORT), MOCK_PESAPAL_IPN_URL: `${site}/api/callbacks/pesapal/e2e-pesapal-cb` },
+      env: { MOCK_PORT: String(MOCK_PORT), MOCK_SMTP_PORT: String(MOCK_SMTP_PORT), MOCK_PESAPAL_IPN_URL: `${site}/api/callbacks/pesapal/e2e-pesapal-cb`, MOCK_PAYSTACK_WEBHOOK_URL: `${site}/api/callbacks/paystack/e2e-paystack-cb` },
       reuseExistingServer: false,
       stdout: 'pipe',
     },

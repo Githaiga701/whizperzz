@@ -20,6 +20,12 @@ try {
   Astro.response.status = err.status;
 }
 
+// Back from a checkout page via its Cancel button: say so plainly instead of "waiting…". Nothing changes in the booking,
+// so if the payment did go through after all, the confirmation still arrives.
+if (view && Astro.url.searchParams.has('cancelled') && view.status === 'pending') {
+  view = { ...view, status: 'failed', message: 'You left the payment page before paying, so nothing was charged. Choose a way to pay below.' };
+}
+
 const help = whatsappUrl(view ? `Hello Whizperz, I have a question about paying for booking ${view.ref}.` : 'Hello Whizperz, I have a question about paying for my trip.');
 const done = view?.status === 'paid';
 const anyMethod = view ? Object.values(view.methods).some(Boolean) : false;
@@ -101,6 +107,17 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
                       </label>
                       <button class="button" type="submit">Continue to card payment</button>
                       <p class="form-note">Visa, Mastercard and mobile money, through Pesapal’s secure page.</p>
+                    </form>
+                  )}
+                  {view.methods.paystack && (
+                    <form class="pay-method" data-pay-gateway="paystack">
+                      <h2>Pay with Paystack</h2>
+                      <label class="field">
+                        Email for your Paystack receipt
+                        <input name="email" type="email" autocomplete="email" required />
+                      </label>
+                      <button class="button" type="submit">Continue to Paystack</button>
+                      <p class="form-note">Visa, Mastercard, M-Pesa and Apple Pay on Paystack’s secure page (part of Stripe). Charged in Kenyan shillings.</p>
                     </form>
                   )}
                   {view.methods.ipos && (
@@ -254,7 +271,7 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
       startPolling();
     });
 
-    const names: Record<string, string> = { ipos: 'iPOS Pay', unipesa: 'Unipesa', crypto: 'crypto' };
+    const names: Record<string, string> = { paystack: 'Paystack', ipos: 'iPOS Pay', unipesa: 'Unipesa', crypto: 'crypto' };
     panel.querySelectorAll<HTMLFormElement>('[data-pay-gateway]').forEach((form) => {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();

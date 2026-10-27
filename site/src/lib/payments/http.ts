@@ -1,6 +1,6 @@
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-export type ProviderName = 'mpesa' | 'pesapal' | 'ipos' | 'unipesa' | 'crypto';
+export type ProviderName = 'mpesa' | 'pesapal' | 'ipos' | 'unipesa' | 'crypto' | 'paystack';
 
 /** An error from a payment provider, with enough detail to log but no secrets. */
 export class ProviderError extends Error {

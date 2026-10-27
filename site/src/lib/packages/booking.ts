@@ -43,7 +43,7 @@ export function availableMethods(deps: PaymentDeps): PayMethods {
   return { ...payMethods(deps, 0), mpesa: Boolean(deps.daraja) };
 }
 
-const METHODS = ['mpesa', 'card', 'ipos', 'unipesa', 'crypto'] as const;
+const METHODS = ['mpesa', 'card', 'paystack', 'ipos', 'unipesa', 'crypto'] as const;
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);

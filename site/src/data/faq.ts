@@ -23,7 +23,7 @@ export const faqs: Faq[] = [
   },
   {
     q: 'How can I pay?',
-    a: 'Yes. Book any priced journey from its page and pay a deposit or the full amount by M-Pesa (a prompt comes to your phone), by card through Pesapal or iPOS Pay, through Unipesa, or in crypto. For tailored trips we send a private pay link instead. See How to book for the details.',
+    a: 'Yes. Book any priced journey from its page and pay a deposit or the full amount by M-Pesa (a prompt comes to your phone), by card or M-Pesa through Pesapal or Paystack, by card through iPOS Pay, through Unipesa, or in crypto. For tailored trips we send a private pay link instead. See How to book for the details.',
     featured: true,
   },
   {

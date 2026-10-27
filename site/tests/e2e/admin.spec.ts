@@ -188,6 +188,25 @@ test('settings: iPOS Pay, Unipesa and crypto are on, and their test buttons work
   await expect(flash()).toContainText('List IP addresses');
 });
 
+test('settings: Paystack is on, its test button works, and its webhook address can be copied', async () => {
+  await page.goto('/admin/settings/');
+  await expect(page.locator('.status-list li', { hasText: 'Paystack' })).toContainText('On (test key)');
+  const ps = page.locator('#paystack');
+  await ps.getByRole('button', { name: 'Test connection' }).click();
+  await expect(flash()).toContainText('Paystack connection works');
+  await expect(page.locator('#paystack-notify')).toHaveValue(/\/api\/callbacks\/paystack\/e2e-paystack-cb$/);
+  await expect(ps).toContainText('Test Webhook URL');
+
+  // The public key is a common mix-up; it is refused with a clear message, and nothing changes.
+  await ps.getByLabel(/^Secret key/).fill('pk_test_0123456789abcdef');
+  await ps.getByRole('button', { name: 'Save Paystack' }).click();
+  await expect(flash()).toContainText('isn’t a Paystack secret key');
+  await ps.getByLabel(/^Payment options/).fill('card, ussd');
+  await ps.getByRole('button', { name: 'Save Paystack' }).click();
+  await expect(flash()).toContainText('card, mobile_money, bank_transfer and apple_pay');
+  await expect(page.locator('.status-list li', { hasText: 'Paystack' })).toContainText('On (test key)');
+});
+
 test('social media links: “soon” until saved, then live in the footer and on Contact', async () => {
   const pub = await context.newPage();
   await pub.goto('/contact/');

@@ -29,6 +29,7 @@ const steps = [
 const ways = [
   { name: 'M-Pesa', detail: 'Safaricom', note: 'Type your number and a prompt pops up on your phone. Enter your PIN and you’re done. Up to KES 250,000 per payment.', on: methods.mpesa },
   { name: 'Pesapal', detail: 'Visa, Mastercard, Airtel Money and more', note: 'You’re taken to Pesapal’s secure checkout, then straight back to us. Charged in Kenyan shillings.', on: methods.card },
+  { name: 'Paystack', detail: 'Cards, M-Pesa, Pesalink and Apple Pay', note: 'Paystack’s secure checkout, part of Stripe. Charged in Kenyan shillings, then straight back to us.', on: methods.paystack },
   { name: 'iPOS Pay', detail: 'Cards, charged in US dollars', note: 'A secure card page by iPOSpays. Handy for cards issued abroad, since you pay in dollars at our posted rate.', on: methods.ipos },
   { name: 'Unipesa', detail: 'Mobile money and cards', note: 'Pay through Unipesa’s secure page with the mobile money or card options it offers in your country.', on: methods.unipesa },
   { name: 'Crypto', detail: 'USDT, USDC, Bitcoin, Ethereum and more', note: 'Through NOWPayments. You pay the dollar price in the coin you choose; confirmation takes a few minutes on the blockchain.', on: methods.crypto },

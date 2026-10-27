@@ -59,6 +59,7 @@ export interface PayMethods {
   ipos: boolean;
   unipesa: boolean;
   crypto: boolean;
+  paystack: boolean;
 }
 
 export const METHOD_LABEL: Record<keyof PayMethods, string> = {
@@ -67,6 +68,7 @@ export const METHOD_LABEL: Record<keyof PayMethods, string> = {
   ipos: 'iPOS Pay',
   unipesa: 'Unipesa',
   crypto: 'Crypto',
+  paystack: 'Paystack',
 };
 
 export const PROVIDER_NAME: Record<string, string> = {
@@ -75,6 +77,7 @@ export const PROVIDER_NAME: Record<string, string> = {
   ipos: 'iPOS Pay',
   unipesa: 'Unipesa',
   crypto: 'crypto (NOWPayments)',
+  paystack: 'Paystack',
   manual: 'manual',
 };
 
@@ -568,6 +571,7 @@ export function payMethods(deps: PaymentDeps, amountKes: number): PayMethods {
     ipos: Boolean(deps.gateways.ipos),
     unipesa: Boolean(deps.gateways.unipesa),
     crypto: Boolean(deps.gateways.crypto),
+    paystack: Boolean(deps.gateways.paystack),
   };
 }
 
@@ -727,7 +731,7 @@ async function reconcile(deps: PaymentDeps, quote: Quote): Promise<void> {
         }
       } else if (p.provider === 'pesapal' && deps.pesapal) {
         await checkPesapal(deps, quote.ref, p);
-      } else if (p.provider === 'ipos' || p.provider === 'unipesa' || p.provider === 'crypto') {
+      } else if (p.provider === 'ipos' || p.provider === 'unipesa' || p.provider === 'crypto' || p.provider === 'paystack') {
         await checkGateway(deps, quote.ref, p);
       }
     } catch (err) {
@@ -938,7 +942,14 @@ export async function refundPayment(deps: PaymentDeps, ref: unknown, input: Refu
   } else if (payment.provider === 'manual') {
     throw new PaymentError(400, 'manual_only', 'This payment was recorded by hand, so record the refund by hand too.');
   } else {
-    const where = payment.provider === 'ipos' ? 'your iPOSpays portal' : payment.provider === 'unipesa' ? 'your Unipesa merchant dashboard' : 'your NOWPayments dashboard';
+    const where =
+      payment.provider === 'ipos'
+        ? 'your iPOSpays portal'
+        : payment.provider === 'unipesa'
+          ? 'your Unipesa merchant dashboard'
+          : payment.provider === 'paystack'
+            ? 'your Paystack dashboard (Transactions → the payment → Refund)'
+            : 'your NOWPayments dashboard';
     throw new PaymentError(
       400,
       'manual_only',

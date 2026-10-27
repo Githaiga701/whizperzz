@@ -59,6 +59,11 @@ if (Astro.request.method === 'POST') {
         setFlash(Astro.cookies, 'ok', 'Unipesa settings saved. Send the notify address below to Unipesa.');
         anchor = '#unipesa';
         break;
+      case 'save_paystack':
+        rt.settings.saveSection('paystack', formObject(form, ['secretKey', 'channels', 'callbackIps']));
+        setFlash(Astro.cookies, 'ok', 'Paystack settings saved. Paste the webhook address below into your Paystack dashboard, then use “Test connection”.');
+        anchor = '#paystack';
+        break;
       case 'save_crypto':
         rt.settings.saveSection('crypto', formObject(form, ['env', 'apiKey', 'ipnSecret']));
         setFlash(Astro.cookies, 'ok', 'Crypto settings saved. Use “Test connection” to check them.');
@@ -66,8 +71,9 @@ if (Astro.request.method === 'POST') {
         break;
       case 'test_ipos':
       case 'test_unipesa':
+      case 'test_paystack':
       case 'test_crypto': {
-        const id = action.replace('test_', '') as 'ipos' | 'unipesa' | 'crypto';
+        const id = action.replace('test_', '') as 'ipos' | 'unipesa' | 'paystack' | 'crypto';
         const g = getRuntime().deps.gateways[id];
         if (!g) throw new Error('Fill in and save these settings first (and the exchange rate under Online booking, for dollar payments).');
         await g.ping();
@@ -164,6 +170,11 @@ const status = [
     ok: pesapalReady(config),
     text: pesapalReady(config) ? `On (${config.pesapal!.baseUrl.includes('cybqa') ? 'sandbox' : 'live'})` : config.pesapal ? 'Almost: press “Test connection” to finish setup' : 'Off: add your Pesapal keys below',
   },
+  {
+    name: 'Paystack',
+    ok: Boolean(config.paystack),
+    text: config.paystack ? `On (${config.paystack.testKey ? 'test key' : 'live key'})` : 'Off: add your Paystack secret key below',
+  },
   { name: 'iPOS Pay', ok: Boolean(config.ipos), text: config.ipos ? `On (${config.ipos.paymentUrl.includes('.tech') ? 'sandbox' : 'live'})` : config.usdRate ? 'Off: add your iPOSpays details below' : 'Off: needs an exchange rate and your iPOSpays details' },
   {
     name: 'Unipesa',
@@ -199,7 +210,7 @@ const status = [
   }
 
   <nav class="settings-nav" aria-label="Settings sections">
-    <a href="#general">Site</a><a href="#booking">Booking</a><a href="#mpesa">M-Pesa</a><a href="#pesapal">Pesapal</a><a href="#ipos">iPOS Pay</a><a href="#unipesa">Unipesa</a><a href="#crypto">Crypto</a><a href="#email">Email</a><a href="#social">Social media</a>
+    <a href="#general">Site</a><a href="#booking">Booking</a><a href="#mpesa">M-Pesa</a><a href="#pesapal">Pesapal</a><a href="#paystack">Paystack</a><a href="#ipos">iPOS Pay</a><a href="#unipesa">Unipesa</a><a href="#crypto">Crypto</a><a href="#email">Email</a><a href="#social">Social media</a>
   </nav>
 
   <div class="panel" style="margin-bottom:20px">
@@ -317,6 +328,30 @@ const status = [
     <p class="hint">
       {config.pesapal?.ipnId ? <>IPN registered (<span class="code">{config.pesapal.ipnId}</span>). Do it again if you change the site address.</> : 'Registering the IPN tells Pesapal where to send payment results. Card payments switch on once it’s done.'}
     </p>
+  </section>
+
+  <section class="panel" id="paystack" aria-labelledby="paystack-h">
+    <h2 id="paystack-h">Paystack (part of Stripe)</h2>
+    <p class="hint">Cards, M-Pesa, Pesalink and Apple Pay on Paystack’s checkout page, charged and settled in Kenyan shillings. The key is in your Paystack dashboard under Settings → API Keys &amp; Webhooks. Use the test key (sk_test_…) until Paystack approves your business, then the live key (sk_live_…).</p>
+    <form method="post" class="admin-form">
+      <input type="hidden" name="action" value="save_paystack" />
+      <SettingField name="secretKey" label="Secret key" hint="Starts with sk_test_ or sk_live_. Also checks that webhooks really come from Paystack. The public key (pk_…) isn’t needed." secret source={src('paystack', 'secretKey')} />
+      <SettingField name="channels" label="Payment options to show" hint="Optional. Leave empty to show everything switched on in your Paystack dashboard, or list some of: card, mobile_money, bank_transfer, apple_pay." placeholder="card, mobile_money" value={s.paystack?.channels} source={src('paystack', 'channels')} envValue={envOf('paystack', 'channels')} />
+      <SettingField name="callbackIps" label="Paystack’s webhook IP addresses" hint="Optional. Paystack publishes these: 52.31.139.75, 52.49.173.169, 52.214.14.220. Webhooks from other addresses are then ignored. Every payment is also confirmed with Paystack’s API either way." value={s.paystack?.callbackIps} source={src('paystack', 'callbackIps')} envValue={envOf('paystack', 'callbackIps')} />
+      <div class="actions"><button class="button button--small" type="submit">Save Paystack</button></div>
+    </form>
+    <div class="actions" style="margin-top:12px">
+      <form method="post"><input type="hidden" name="action" value="test_paystack" /><button class="button button--small button--ghost" type="submit" disabled={!config.paystack}>Test connection</button></form>
+    </div>
+    {config.paystack && (
+      <>
+        <p class="hint">Webhook address. Paste it into Paystack: Settings → API Keys &amp; Webhooks → {config.paystack.testKey ? 'Test' : 'Live'} Webhook URL.</p>
+        <div class="copy-row">
+          <input id="paystack-notify" readonly value={config.paystack.notifyUrl} aria-label="Paystack webhook address" />
+          <button class="button button--small button--ghost" type="button" data-copy="#paystack-notify">Copy</button>
+        </div>
+      </>
+    )}
   </section>
 
   <section class="panel" id="ipos" aria-labelledby="ipos-h">

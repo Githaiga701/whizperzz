@@ -59,6 +59,12 @@ export interface Settings {
     statusUrl?: string;
     callbackSecret?: string;
   };
+  paystack?: {
+    secretKey?: string;
+    channels?: string;
+    callbackIps?: string;
+    callbackSecret?: string;
+  };
   social?: {
     instagram?: string;
     twitter?: string;
@@ -82,10 +88,10 @@ export interface Settings {
   };
 }
 
-export type Section = 'mpesa' | 'pesapal' | 'email' | 'booking' | 'ipos' | 'unipesa' | 'crypto' | 'social';
+export type Section = 'mpesa' | 'pesapal' | 'email' | 'booking' | 'ipos' | 'unipesa' | 'crypto' | 'paystack' | 'social';
 
 /** Sections whose notify address contains a secret we create. */
-const CALLBACK_SECTIONS: readonly Section[] = ['mpesa', 'pesapal', 'ipos', 'unipesa', 'crypto'];
+const CALLBACK_SECTIONS: readonly Section[] = ['mpesa', 'pesapal', 'ipos', 'unipesa', 'crypto', 'paystack'];
 
 /** Fields that are never shown back in the browser. Leaving them blank on save keeps the saved value. */
 export const SECRET_FIELDS: Record<Section, readonly string[]> = {
@@ -96,6 +102,7 @@ export const SECRET_FIELDS: Record<Section, readonly string[]> = {
   ipos: ['authToken', 'secretKey', 'callbackSecret'],
   unipesa: ['secretKey', 'callbackSecret'],
   crypto: ['apiKey', 'ipnSecret', 'callbackSecret'],
+  paystack: ['secretKey', 'callbackSecret'],
   social: [],
 };
 
@@ -152,6 +159,12 @@ export const ENV_MAP = {
     statusUrl: 'UNIPESA_STATUS_URL',
     callbackSecret: 'UNIPESA_CALLBACK_SECRET',
   },
+  paystack: {
+    secretKey: 'PAYSTACK_SECRET_KEY',
+    channels: 'PAYSTACK_CHANNELS',
+    callbackIps: 'PAYSTACK_CALLBACK_IPS',
+    callbackSecret: 'PAYSTACK_CALLBACK_SECRET',
+  },
   social: {
     instagram: 'SOCIAL_INSTAGRAM',
     twitter: 'SOCIAL_TWITTER',
@@ -182,7 +195,7 @@ export function settingsToEnv(s: Settings): Record<string, string> {
   };
   put(ENV_MAP.siteUrl, s.siteUrl);
   put(ENV_MAP.paymentsMode, s.paymentsMode);
-  for (const section of ['mpesa', 'pesapal', 'email', 'booking', 'ipos', 'unipesa', 'crypto', 'social'] as const) {
+  for (const section of ['mpesa', 'pesapal', 'email', 'booking', 'ipos', 'unipesa', 'crypto', 'paystack', 'social'] as const) {
     const values = (s[section] ?? {}) as Record<string, unknown>;
     for (const [field, key] of Object.entries(ENV_MAP[section])) put(key, values[field]);
   }
@@ -204,7 +217,13 @@ export function newSecret(): string {
   return randomBytes(24).toString('base64url');
 }
 
-function validateField(field: string, v: string): void {
+function validateField(field: string, v: string, section?: Section): void {
+  if (section === 'paystack' && field === 'secretKey' && !/^sk_(test|live)_[A-Za-z0-9]{10,}$/.test(v)) {
+    throw new Error('That isn’t a Paystack secret key. It starts with sk_test_ (for testing) or sk_live_ (for real payments). The public key (pk_…) isn’t needed.');
+  }
+  if (field === 'channels' && !v.split(/[\s,]+/).filter(Boolean).every((c) => ['card', 'mobile_money', 'bank_transfer', 'apple_pay'].includes(c.toLowerCase()))) {
+    throw new Error('Payment options can be card, mobile_money, bank_transfer and apple_pay, separated by commas.');
+  }
   if (field === 'env' && v !== 'sandbox' && v !== 'production') throw new Error('Environment must be sandbox or live.');
   if (field === 'port' && !/^\d{1,5}$/.test(v)) throw new Error('The port is a number, usually 587 or 465.');
   if (field === 'secure' && v !== 'yes' && v !== 'no') throw new Error('Choose a secure connection option.');
@@ -286,7 +305,7 @@ export class SettingsStore {
       if (field === 'callbackSecret' || field === 'ipnId' || field === 'ipnUrl') continue;
       if (!(field in input)) continue;
       const v = (input[field] ?? '').trim();
-      if (v !== '') validateField(field, v);
+      if (v !== '') validateField(field, v, section);
       if (secrets.includes(field)) {
         if (v !== '') current[field] = v;
       } else if (v === '') {
