@@ -166,6 +166,14 @@ details.action[open] > summary { margin-bottom: 8px; }
 .danger-zone { margin-top: 28px; border-color: #e6c3b4; }
 .pkg-form .panel + .panel { margin-top: 0; }
 
+/* A warning under a settings section (e.g. M-Pesa can't call the site back). */
+.hint--warn {
+  padding: 0.6rem 0.8rem;
+  border-left: 3px solid #b5651d;
+  background: #f6e7d3;
+  color: #4a2d0f;
+}
+
 /* ---------- Phones and tablets ---------- */
 /* Grid and flex children may shrink below their content, so a long option or hint never pushes the page sideways. */
 .admin-main .panel, .admin-form > *, .admin-form .two > *, .pkg-form > *, .panel-grid > * { min-width: 0; }

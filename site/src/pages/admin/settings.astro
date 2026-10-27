@@ -6,6 +6,7 @@ import { ENV_MAP, fieldSource, type Section } from '@/lib/settings/store';
 import { ensurePesapalIpn, getRuntime, reloadRuntime, log } from '@/lib/server/payments';
 import { pesapalReady } from '@/lib/payments/config';
 import { testEmail } from '@/lib/email/templates';
+import { explainMpesaError, mpesaCallbackProblem } from '@/lib/payments/service';
 
 export const prerender = false;
 
@@ -78,6 +79,8 @@ if (Astro.request.method === 'POST') {
         const d = getRuntime().deps.daraja;
         if (!d) throw new Error('Fill in and save the M-Pesa keys first.');
         await d.ping();
+        const callbackIssue = mpesaCallbackProblem(getRuntime().deps.config);
+        if (callbackIssue) throw new Error(`Your keys work, but guests can't pay yet: ${explainMpesaError(callbackIssue)}`);
         setFlash(Astro.cookies, 'ok', 'M-Pesa connection works. Safaricom accepted your consumer key and secret.');
         anchor = '#mpesa';
         break;
@@ -283,6 +286,7 @@ const status = [
       <form method="post"><input type="hidden" name="action" value="test_mpesa" /><button class="button button--small button--ghost" type="submit" disabled={!config.mpesa}>Test connection</button></form>
     </div>
     {config.mpesa && <p class="hint">Payment results go to: <span class="code">{config.mpesa.callbackUrl.replace(config.mpesa.callbackSecret, '••••')}</span></p>}
+    {config.mpesa && mpesaCallbackProblem(config) && <p class="hint hint--warn" role="alert"><strong>Guests can’t pay by M-Pesa yet.</strong> {explainMpesaError(mpesaCallbackProblem(config)!)}</p>}
   </section>
 
   <section class="panel" id="pesapal" aria-labelledby="pesapal-h">
