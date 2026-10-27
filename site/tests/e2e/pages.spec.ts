@@ -170,15 +170,64 @@ test.describe('landing page motion', () => {
     await expect(map).toHaveClass(/is-in/);
   });
 
-  test('nothing moves for people who ask for less motion', async ({ browser }) => {
+  test('with less motion asked for, things only fade in: nothing slides, zooms or drifts', async ({ browser }) => {
     const context = await browser.newContext({ reducedMotion: 'reduce' });
     const page = await context.newPage();
     await page.route(/images\.unsplash\.com|translate\.google/, (r) => r.abort());
     await page.goto('/');
-    await expect(page.locator('html')).not.toHaveClass(/\bmotion\b/);
-    // Everything is visible straight away, without scrolling.
-    await expect(page.locator('.journey-grid > .journey-card').first()).toHaveCSS('opacity', '1');
+    const html = page.locator('html');
+    await expect(html).toHaveClass(/\bmotion-soft\b/);
+    await expect(html).not.toHaveClass(/(^|\s)motion(\s|$)/);
+    // No moving parts: the marquee, photo zoom and birds stay still, and the hero doesn't parallax.
     await expect(page.locator('.marquee-track')).toHaveCSS('animation-name', 'none');
+    await expect(page.locator('.hero-photo img')).toHaveCSS('animation-name', 'none');
+    await expect(page.locator('.flock')).toHaveCSS('animation-name', 'none');
+    // A card fades in when it reaches the screen, without moving.
+    const card = page.locator('.journey-grid > .journey-card').first();
+    await expect(card).toHaveCSS('opacity', '0');
+    await card.scrollIntoViewIfNeeded();
+    await expect(card).toHaveClass(/is-in/);
+    await expect(card).toHaveCSS('opacity', '1', { timeout: 3000 });
+    await expect(card).toHaveCSS('transform', 'none');
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await expect(page.locator('.hero-photo')).toHaveCSS('transform', 'none');
     await context.close();
+  });
+
+  test('on a touch screen, cards lean as they scroll past and taps get a response', async ({ browser }) => {
+    const context = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+    const page = await context.newPage();
+    await page.route(/images\.unsplash\.com|translate\.google/, (r) => r.abort());
+    await page.goto('/');
+    expect(await page.evaluate(() => matchMedia('(hover: hover) and (pointer: fine)').matches)).toBe(false);
+    const card = page.locator('.journey-grid > .journey-card').first();
+    await card.scrollIntoViewIfNeeded();
+    await expect(card).toHaveClass(/is-in/);
+    await expect(card).toHaveClass(/is-leaning/, { timeout: 4000 });
+    // Low on the screen it leans back; scrolled up past the middle it leans the other way.
+    const lean = () => card.evaluate((el) => parseFloat(getComputedStyle(el).getPropertyValue('--rx')));
+    await card.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - window.innerHeight * 0.75));
+    await expect.poll(lean).toBeGreaterThan(0.5);
+    await card.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - window.innerHeight * 0.05));
+    await expect.poll(lean).toBeLessThan(-0.5);
+    // Hover-only effects stay off, so nothing is left stuck after a tap.
+    await expect(card).not.toHaveClass(/is-tilting/);
+    await context.close();
+  });
+
+  test('the name under the logo reads "Tours & Safaris" on phones too', async ({ browser }) => {
+    for (const width of [320, 390]) {
+      const context = await browser.newContext({ viewport: { width, height: 760 } });
+      const page = await context.newPage();
+      await page.route(/images\.unsplash\.com|translate\.google/, (r) => r.abort());
+      await page.goto('/');
+      const sub = page.locator('.site-header .brand-name small');
+      await expect(sub).toBeVisible();
+      await expect(sub).toHaveText('Tours & Safaris');
+      // It fits beside the menu button.
+      const [subBox, menuBox] = [await sub.boundingBox(), await page.locator('.menu-toggle').boundingBox()];
+      expect(subBox!.x + subBox!.width).toBeLessThan(menuBox!.x);
+      await context.close();
+    }
   });
 });

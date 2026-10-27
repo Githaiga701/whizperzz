@@ -618,6 +618,29 @@ test('security: other websites, logged-out visitors, lockouts and headers', asyn
   await other.close();
 });
 
+test('on a phone the admin menu is one row, with the name and Log out beside the logo', async () => {
+  const phone = await context.newPage();
+  await phone.setViewportSize({ width: 375, height: 760 });
+  await phone.goto('/admin/settings/');
+  const nav = phone.getByRole('navigation', { name: 'Admin' });
+  const links = nav.getByRole('link');
+  // All tabs sit on the same line…
+  const tops = await links.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+  expect(new Set(tops).size).toBe(1);
+  // …and the row scrolls sideways, with the current page's tab brought into view.
+  const current = nav.locator('[aria-current="page"]');
+  await expect(current).toHaveText('Settings');
+  await expect(current).toBeInViewport({ ratio: 1 });
+  await expect(phone.locator('.admin-top .brand-name small')).toHaveText('Admin');
+  await expect(phone.locator('.admin-top .brand-name small')).toBeVisible();
+  const [brand, logout] = [await phone.locator('.admin-top .brand').boundingBox(), await phone.getByRole('button', { name: 'Log out' }).boundingBox()];
+  expect(Math.abs(brand!.y + brand!.height / 2 - (logout!.y + logout!.height / 2))).toBeLessThan(12);
+  // The header leaves most of the screen for the page.
+  const header = await phone.locator('.admin-top').boundingBox();
+  expect(header!.height).toBeLessThan(130);
+  await phone.close();
+});
+
 test('every admin screen fits a phone without sideways scrolling', async () => {
   const phone = await context.newPage();
   await phone.setViewportSize({ width: 360, height: 740 });

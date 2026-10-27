@@ -2,13 +2,15 @@
 
 .admin-body { background: #efe9d8; min-height: 100vh; display: flex; flex-direction: column; }
 .admin-top { background: var(--bark); color: var(--on-dark); }
-.admin-top .wrap { display: flex; align-items: center; gap: 24px; min-height: 64px; flex-wrap: wrap; }
-.admin-top .brand { color: var(--on-dark); }
+.admin-top .wrap { display: flex; align-items: center; gap: 8px 24px; min-height: 64px; flex-wrap: wrap; padding-block: 8px; }
+.admin-top .brand { color: var(--on-dark); flex: none; }
 .admin-top .brand-mark { width: 34px; height: 34px; }
 .admin-top .brand-name small { color: var(--on-dark-muted); }
-.admin-nav { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+.admin-nav { position: relative; display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+.admin-account { display: flex; align-items: center; gap: 4px; }
+.admin-account form { margin: 0; }
 .admin-nav a,
-.admin-nav button {
+.admin-account button {
   color: var(--on-dark);
   text-decoration: none;
   padding: 8px 12px;
@@ -19,7 +21,7 @@
   border: 0;
   cursor: pointer;
 }
-.admin-nav a:hover, .admin-nav button:hover { background: var(--bark-soft); }
+.admin-nav a:hover, .admin-account button:hover { background: var(--bark-soft); }
 .admin-nav a[aria-current='page'] { background: var(--bark-soft); box-shadow: inset 0 -2px 0 var(--grass); }
 .admin-user { color: var(--on-dark-muted); font-size: 0.875rem; padding: 0 4px 0 12px; }
 .admin-main { flex: 1; padding-block: 32px 64px; }
@@ -98,7 +100,13 @@ details.action[open] > summary { margin-bottom: 8px; }
 .timeline time { display: block; color: var(--muted); font-size: 0.8125rem; }
 
 .status-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
-.status-list li { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.status-list li { display: grid; grid-template-columns: 3.2em max-content minmax(0, 1fr); gap: 4px 10px; align-items: baseline; }
+.status-list .badge { justify-self: start; }
+@media (max-width: 640px) {
+  /* Badge and name on one line, the explanation underneath, all lined up. */
+  .status-list li { grid-template-columns: 3.2em minmax(0, 1fr); }
+  .status-list .status-text { grid-column: 2; color: var(--muted); font-size: var(--step--1); line-height: 1.45; }
+}
 .settings-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
 .settings-nav a { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; font-size: 0.9375rem; background: var(--paper); }
 .settings-nav a:hover { border-color: var(--bark); }
@@ -187,7 +195,8 @@ details.action[open] > summary { margin-bottom: 8px; }
   .admin-main input, .admin-main select, .admin-main textarea, .copy-row input, .day-row input, .day-row textarea { font-size: 1rem; }
 }
 @media (pointer: coarse) {
-  .button--small, .settings-nav a, .admin-nav a, .admin-nav button { min-height: 44px; }
+  .button--small, .settings-nav a, .admin-nav a, .admin-account button { min-height: 44px; }
+  .admin-nav a { display: inline-flex; align-items: center; }
   .settings-nav a { display: inline-flex; align-items: center; }
   .mini-btn { width: 44px; height: 44px; }
   details.action > summary { padding-block: 10px; }
@@ -197,4 +206,68 @@ details.action[open] > summary { margin-bottom: 8px; }
   /* Keep the sticky Save bar to one row so it doesn't cover half the screen. */
   .pkg-save { flex-wrap: nowrap; }
   .pkg-save .button { flex: 1 1 0; min-width: 0; padding-inline: 10px; white-space: nowrap; }
+}
+
+/* ---------- Phones: a smaller scale so more fits, and a one-row menu ---------- */
+@media (max-width: 640px) {
+  .admin-body {
+    --step--1: 0.8125rem;
+    --step-0: 0.9375rem;
+    --step-1: 1.125rem;
+    --step-2: 1.375rem;
+    --step-3: 1.75rem;
+    --gutter: 14px;
+    font-size: var(--step-0);
+  }
+  .admin-top .wrap { gap: 4px 8px; min-height: 0; padding-block: 10px 0; }
+  .admin-top .brand-mark { width: 30px; height: 30px; }
+  .admin-top .brand-mark svg { width: 20px; height: 20px; }
+  .admin-top .brand-name { font-size: 1.2rem; }
+  .admin-top .brand-name small { font-size: 0.6875rem; margin-top: 2px; }
+  .admin-account { margin-left: auto; }
+  .admin-user { padding: 0 2px 0 0; font-size: 0.8125rem; max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .admin-account button { padding: 6px 10px; font-size: 0.875rem; }
+  /* The menu becomes one row that scrolls sideways, edge to edge, with a fade hinting there's more. */
+  .admin-nav {
+    order: 3;
+    flex: 1 0 100%;
+    flex-wrap: nowrap;
+    gap: 2px;
+    margin: 4px calc(var(--gutter) * -1) 0;
+    padding: 0 var(--gutter) 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-inline: var(--gutter);
+    mask-image: linear-gradient(90deg, transparent 0, #000 var(--gutter), #000 calc(100% - 28px), transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--gutter), #000 calc(100% - 28px), transparent);
+  }
+  .admin-nav::-webkit-scrollbar { display: none; }
+  .admin-nav a { flex: none; white-space: nowrap; padding: 8px 11px; font-size: 0.875rem; }
+  .admin-nav a:last-child { margin-right: 14px; }
+
+  .admin-main { padding-block: 16px 40px; }
+  .admin-head { margin-bottom: 16px; gap: 10px; }
+  .admin-head p { font-size: var(--step--1); line-height: 1.5; }
+  .panel { padding: 14px; }
+  .panel + .panel { margin-top: 14px; }
+  .admin-main h2 { margin-bottom: 10px; }
+  .settings-nav { gap: 6px; margin-bottom: 14px; }
+  .settings-nav a { padding: 4px 10px; font-size: 0.8125rem; }
+  .flash { padding: 10px 12px; font-size: 0.875rem; margin-bottom: 14px; }
+  .admin-main .button:not(.button--small) { min-height: 44px; padding: 10px 18px; font-size: 0.9375rem; }
+  .admin-main .field, .admin-form label { font-size: 0.875rem; }
+  .admin-main .hint { font-size: 0.8125rem; }
+  .auth-wrap .panel { padding: 20px; }
+}
+@media (max-width: 480px) {
+  /* Journeys list: a smaller photo and tighter columns so Status fits without swiping sideways. */
+  .pkg-table .pkg-cell { gap: 8px; }
+  .pkg-table .pkg-cell img { width: 44px; height: 34px; }
+  .pkg-table th, .pkg-table td { padding: 9px 6px; }
+  .pkg-table .badge { font-size: 0.6875rem; padding-inline: 6px; white-space: nowrap; }
+  .pkg-table td:first-child a { white-space: normal; }
+}
+@media (max-width: 360px) {
+  .pkg-table .pkg-cell img { display: none; }
 }

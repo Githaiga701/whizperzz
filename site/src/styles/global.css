@@ -296,7 +296,7 @@ body { top: 0 !important; }
 @media (max-width: 640px) {
   :root { --header-h: 64px; }
   .header-actions .button { display: none; }
-  .brand-name small { display: none; }
+  .brand-name small { font-size: 0.6875rem; margin-top: 3px; white-space: nowrap; }
   #google_translate_element { max-width: 92px; overflow: hidden; }
 }
 
@@ -1183,10 +1183,37 @@ body { top: 0 !important; }
 .motion .itinerary [data-reveal] { transform: translate3d(-24px, 0, 0); }
 .motion .itinerary [data-reveal].is-in { transform: none; }
 
-/* Buttons get a little lift */
+/* Buttons get a little lift (only where there is real hover: on phones a tap would leave it stuck up) */
 .motion .button { transition: background-color 0.2s, color 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s; }
-.motion .button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 20px -12px rgba(42, 32, 23, 0.6); }
+@media (hover: hover) {
+  .motion .button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 20px -12px rgba(42, 32, 23, 0.6); }
+}
 .motion .button:active:not(:disabled) { transform: none; box-shadow: none; }
+
+/* Touch screens: cards lean as they scroll past and catch the light in the middle of the screen; taps press in */
+.motion [data-tilt].is-leaning { transition: transform 0.2s linear, box-shadow 0.4s, opacity 0.8s; }
+.motion [data-tilt].is-lit::before { opacity: 0.75; transition: opacity 0.5s; }
+.motion [data-tilt].is-lit { box-shadow: 0 22px 40px -26px rgba(42, 32, 23, 0.5); }
+@media (hover: none) {
+  .motion .button:active:not(:disabled) { transform: scale(0.97); transition-duration: 0.08s; }
+  .motion [data-tilt]:active { transform: perspective(900px) rotateX(var(--rx, 0deg)) scale(0.985); transition-duration: 0.1s; }
+  .motion .chip:active, .motion .place-list a:active { transform: scale(0.97); transition: transform 0.08s; }
+}
+
+/* ---------- Reduced motion: a gentle fade only (html.motion-soft) ---------- */
+/* Opacity changes don't move anything, so they are fine for people who are bothered by motion. */
+.motion-soft [data-reveal],
+.motion-soft [data-reveal-group] > *,
+.motion-soft .kenya-map[data-animate] .pin { opacity: 0; transition: opacity 0.7s ease !important; transition-delay: calc(var(--i, 0) * 80ms) !important; }
+.motion-soft [data-reveal].is-in,
+.motion-soft [data-reveal-group] > .is-in,
+.motion-soft .kenya-map[data-animate].is-in .pin { opacity: 1; }
+.motion-soft [data-words] span { opacity: 0.15; transition: opacity 0.6s ease !important; transition-delay: calc(var(--i) * 45ms) !important; }
+.motion-soft [data-words].is-in span { opacity: 1; }
+.motion-soft .hero-copy, .motion-soft .hero-actions, .motion-soft .hero-title { animation: soft-in 0.9s ease both !important; }
+.motion-soft .hero-copy { animation-delay: 0.3s !important; }
+.motion-soft .hero-actions { animation-delay: 0.5s !important; }
+@keyframes soft-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* ---------- Motion preferences ---------- */
 

@@ -206,7 +206,7 @@ const status = [
     <h2>Status</h2>
     <ul class="status-list">
       {status.map((x) => (
-        <li><span class:list={['badge', x.ok ? 'badge--paid' : 'badge--awaiting_payment']}>{x.ok ? 'On' : 'Off'}</span><strong>{x.name}</strong> {x.text}</li>
+        <li><span class:list={['badge', x.ok ? 'badge--paid' : 'badge--awaiting_payment']}>{x.ok ? 'On' : 'Off'}</span><strong>{x.name}</strong> <span class="status-text">{x.text}</span></li>
       ))}
     </ul>
     {local && <p class="hint" style="margin:0">Your site address is on this computer ({config.siteUrl}). M-Pesa and Pesapal can’t send results there, so payments will only confirm when you check them by hand. Use your public https address once the site is online.</p>}

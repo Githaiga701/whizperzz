@@ -43,8 +43,9 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     {heroImage && <meta property="og:image" content={heroImage} />}
     {heroImage && <link rel="preload" as="image" href={heroImage} fetchpriority="high" />}
     <script is:inline>
-      // Movement is opt-out: skipped entirely when the device asks for reduced motion.
-      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) document.documentElement.classList.add('motion');
+      // Full movement by default. When the device asks for reduced motion (iPhone: Settings → Accessibility → Motion),
+      // things still fade in gently but nothing slides, zooms or drifts.
+      document.documentElement.classList.add(window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'motion-soft' : 'motion');
     </script>
   </head>
   <body>

@@ -1,10 +1,14 @@
 /**
- * Gentle movement for the public site. Everything here is decoration: the page reads the same without it,
- * and none of it runs for people who ask their device for reduced motion (the <html class="motion"> switch).
+ * Gentle movement for the public site. Everything here is decoration: the page reads the same without it.
+ * <html class="motion">: full movement. <html class="motion-soft">: the device asked for reduced motion, so
+ * sections only fade in (no sliding, zooming, parallax or leaning).
  */
 
 const root = document.documentElement;
 const moving = root.classList.contains('motion');
+const fading = moving || root.classList.contains('motion-soft');
+/** A mouse or trackpad; phones and tablets have neither, so they get scroll and tap movement instead of hover. */
+const finePointer = matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 /* ---------- Scroll reveals: [data-reveal], staggered inside [data-reveal-group] ---------- */
 
@@ -13,7 +17,7 @@ function reveals() {
   document.querySelectorAll<HTMLElement>('[data-reveal-group]').forEach((group) => {
     [...group.children].forEach((child, i) => (child as HTMLElement).style.setProperty('--i', String(i % 6)));
   });
-  if (!moving || !('IntersectionObserver' in window)) {
+  if (!fading || !('IntersectionObserver' in window)) {
     items.forEach((el) => el.classList.add('is-in'));
     return;
   }
@@ -23,7 +27,7 @@ function reveals() {
         if (!e.isIntersecting) continue;
         const el = e.target as HTMLElement;
         el.classList.add('is-in');
-        if (el.matches('.kenya-map[data-animate]')) drawRoute(el);
+        if (moving && el.matches('.kenya-map[data-animate]')) drawRoute(el);
         io.unobserve(el);
       }
     },
@@ -84,7 +88,7 @@ function parallax() {
 /* ---------- Cards lean towards the pointer ---------- */
 
 function tilt() {
-  if (!moving || !matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+  if (!moving || !finePointer) return;
   document.querySelectorAll<HTMLElement>('[data-tilt]').forEach((card) => {
     let frame = 0;
     card.addEventListener('pointerenter', () => (card.style.transitionDelay = '0s'));
@@ -110,7 +114,57 @@ function tilt() {
   });
 }
 
+/* ---------- Touch screens: cards lean as they pass through the screen ---------- */
+
+function lean() {
+  if (!moving || finePointer || !('IntersectionObserver' in window)) return;
+  const cards = [...document.querySelectorAll<HTMLElement>('[data-tilt]')];
+  if (!cards.length) return;
+  const onScreen = new Set<HTMLElement>();
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      const card = e.target as HTMLElement;
+      if (e.isIntersecting) onScreen.add(card);
+      else onScreen.delete(card);
+    }
+    schedule();
+  });
+  cards.forEach((c) => io.observe(c));
+  let ticking = false;
+  const update = () => {
+    ticking = false;
+    const vh = window.innerHeight || 1;
+    for (const card of onScreen) {
+      // Leaning starts once the card has finished rising into place.
+      if (!card.classList.contains('is-in')) continue;
+      if (!card.classList.contains('is-leaning')) {
+        if (!card.dataset['leanAt']) card.dataset['leanAt'] = String(performance.now());
+        if (performance.now() - Number(card.dataset['leanAt']) < 1000) {
+          schedule();
+          continue;
+        }
+        card.classList.add('is-leaning');
+      }
+      const r = card.getBoundingClientRect();
+      // -0.5 when the card's middle is at the top of the screen, 0 in the middle, 0.5 at the bottom.
+      const t = Math.max(-0.5, Math.min(0.5, (r.top + r.height / 2) / vh - 0.5));
+      card.style.setProperty('--rx', `${(t * 9).toFixed(2)}deg`);
+      card.style.setProperty('--gy', `${((0.5 - t) * 100).toFixed(0)}%`);
+      card.classList.toggle('is-lit', Math.abs(t) < 0.2);
+    }
+  };
+  function schedule() {
+    if (!ticking) {
+      ticking = true;
+      requestAnimationFrame(update);
+    }
+  }
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule, { passive: true });
+}
+
 numberPins();
 reveals();
 parallax();
 tilt();
+lean();
