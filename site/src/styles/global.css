@@ -1214,11 +1214,18 @@ body { top: 0 !important; }
 .motion-soft .hero-copy { animation-delay: 0.3s !important; }
 .motion-soft .hero-actions { animation-delay: 0.5s !important; }
 @keyframes soft-in { from { opacity: 0; } to { opacity: 1; } }
+.motion-soft .hero-photo img, .motion-soft .page-hero > img { animation: soft-in 1.4s ease both; }
+.motion-soft .hero-whisper { animation: soft-in 0.9s 0.2s ease both; }
 
 /* ---------- Motion preferences ---------- */
 
+/* Reduced motion keeps the gentle fades above (html.motion-soft) and stops only things that move or zoom.
+   This used to zero every animation and transition on the page, which also wiped out the fades, so phones
+   with reduced motion on (Android battery saver or "Remove animations" turns it on) showed no motion at all. */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
-  .whisper--typing blockquote .ch { opacity: 1; }
+  .journey-card:hover .journey-card-photo img { transform: none; }
+  .contact-dock { transition: opacity 0.25s ease; }
+  .contact-dock.is-tucked { transform: none; }
+  .route-mask.is-drawing { animation: none; }
 }

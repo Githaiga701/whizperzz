@@ -1,6 +1,7 @@
 ---
 import { STYLE_LABEL, routeLabel, type TripPackage } from '@/lib/packages/store';
 import { kes } from '@/lib/packages/pricing';
+import { responsive } from '@/lib/images';
 
 interface Props {
   pkg: TripPackage;
@@ -23,7 +24,7 @@ const price = pkg.pricing.adultKes;
   data-tilt
 >
   <div class="journey-card-photo">
-    <img src={pkg.photo.src} alt={pkg.photo.alt} loading="lazy" decoding="async" width="900" height="675" />
+    <img {...responsive(pkg.photo.src, '(max-width: 640px) 100vw, (max-width: 1080px) 50vw, 400px', 1280)} alt={pkg.photo.alt} loading="lazy" decoding="async" width="900" height="675" />
   </div>
   <span class="days-badge">{pkg.days} days</span>
   <div class="journey-card-body">

@@ -6,11 +6,12 @@ interface Props {
   image?: { src: string; alt: string } | undefined;
   crumbs?: { href: string; label: string }[] | undefined;
 }
+import { responsive } from '@/lib/images';
 const { title, kicker, intro, image, crumbs } = Astro.props;
 ---
 
 <section class:list={['page-hero', !image && 'page-hero--plain']}>
-  {image && <img src={image.src} alt={image.alt} fetchpriority="high" width="1800" height="1000" />}
+  {image && <img {...responsive(image.src, '100vw')} alt={image.alt} fetchpriority="high" decoding="async" width="1800" height="1000" />}
   <div class="wrap">
     {
       crumbs && (

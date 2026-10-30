@@ -4,7 +4,8 @@ import type { FieldNote } from '@/data/notes';
 /**
  * A handwritten note that writes itself in, rests, rubs itself out and makes way for the next one.
  * The first note is chosen on the server, so the card is never empty (and works without JavaScript).
- * People who ask for less motion get one note, already written, that doesn't change.
+ * Writing in and rubbing out only change opacity (nothing moves), so it runs for reduced-motion visitors too;
+ * it pauses on hover, focus, off screen and in background tabs.
  */
 interface Props {
   notes: FieldNote[];
@@ -42,7 +43,6 @@ const longest = notes.reduce((a, b) => (b.text.length > a.text.length ? b : a), 
     const textEl = fig.querySelector<HTMLElement>('[data-note-text]')!;
     const srEl = fig.querySelector<HTMLElement>('[data-note-sr]')!;
     const fromEl = fig.querySelector<HTMLElement>('[data-note-from]')!;
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const chars = () => [...textEl.querySelectorAll<HTMLElement>('.ch')];
     const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
@@ -88,7 +88,7 @@ const longest = notes.reduce((a, b) => (b.text.length > a.text.length ? b : a), 
       fromEl.textContent = note.from;
     }
 
-    if (reduce || pool.length < 2) {
+    if (pool.length < 2) {
       chars().forEach((c) => c.classList.add('on'));
     } else {
       // A shuffled order that starts after the note the server picked, so nothing repeats until all have shown.

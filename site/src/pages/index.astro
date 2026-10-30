@@ -11,22 +11,25 @@ import { destinationNames, getPackageStore } from '@/lib/server/packages';
 export const prerender = false;
 import { faqs } from '@/data/faq';
 import { site } from '@/config/site';
+import { responsive } from '@/lib/images';
 
 const destinations = await getDestinations();
 const journeys = await getPackageStore().list({ publishedOnly: true });
 const names = await destinationNames();
 const featured = journeys.slice(0, 3);
-const heroImage = 'https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=2200&q=80';
+const heroImage = 'https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop';
+const hero = responsive(heroImage, '100vw');
+const quoteImg = responsive('https://images.unsplash.com/photo-1535338454770-8be927b5a00b?auto=format&fit=crop', '100vw');
 const strip = destinations.slice(0, 5);
 const headline = 'Find your way into the wild.'.split(' ');
 const quote = 'A safari should feel less like a checklist and more like being let in.'.split(' ');
 const marquee = destinations.map((d) => d.data.name);
 ---
 
-<Base title={site.name} heroImage={heroImage}>
+<Base title={site.name} heroImage={heroImage} heroSizes="100vw">
   <section class="hero" data-parallax>
     <div class="hero-photo">
-      <img src={heroImage} alt="Elephants walking across the savannah at sunset" width="2200" height="1400" fetchpriority="high" />
+      <img {...hero} alt="Elephants walking across the savannah at sunset" width="2200" height="1400" fetchpriority="high" decoding="async" />
     </div>
     <svg class="flock" viewBox="0 0 200 60" aria-hidden="true" focusable="false">
       {[[0, 20, 1], [26, 8, 0.8], [48, 26, 0.9], [70, 12, 0.7], [92, 30, 0.6]].map(([x, y, s], i) => (
@@ -130,7 +133,7 @@ const marquee = destinations.map((d) => d.data.name);
         {
           strip.slice(0, 4).map((d) => (
             <figure>
-              <img src={d.data.photo.src.replace('w=1800', 'w=1000')} alt={d.data.photo.alt} loading="lazy" width="1000" height="700" />
+              <img {...responsive(d.data.photo.src, '(max-width: 640px) 100vw, (max-width: 1240px) 50vw, 620px', 1280)} alt={d.data.photo.alt} loading="lazy" decoding="async" width="1000" height="700" />
               <figcaption>{d.data.name}</figcaption>
             </figure>
           ))
@@ -140,7 +143,7 @@ const marquee = destinations.map((d) => d.data.name);
   </section>
 
   <section class="quote-band section">
-    <img src="https://images.unsplash.com/photo-1535338454770-8be927b5a00b?auto=format&fit=crop&w=2000&q=80" alt="" loading="lazy" width="2000" height="1200" />
+    <img {...quoteImg} alt="" loading="lazy" decoding="async" width="2000" height="1200" />
     <div class="wrap">
       <blockquote data-words>
         {quote.map((w, i) => (

@@ -450,6 +450,10 @@ test('packages: add a journey with a photo and a price, edit, hide and delete it
   const img = await request.get(src!);
   expect(img.headers()['content-type']).toBe('image/png');
   expect((await request.get('/media/..%2Fpackages.json')).status()).toBe(404);
+  // Asked for a smaller size, it comes back as a WebP that can be cached for good.
+  const small = await request.get(`${src}?w=480`);
+  expect(small.headers()['content-type']).toBe('image/webp');
+  expect(small.headers()['cache-control']).toContain('immutable');
 
   // It's on the public site with its price and route.
   const pub = await context.newPage();

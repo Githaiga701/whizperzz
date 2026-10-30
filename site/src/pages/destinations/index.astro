@@ -3,6 +3,7 @@ import Base from '@/layouts/Base.astro';
 import PageHero from '@/components/PageHero.astro';
 import FilterBar from '@/components/FilterBar.astro';
 import { getDestinations, kindLabel } from '@/lib/content';
+import { responsive } from '@/lib/images';
 
 const destinations = await getDestinations();
 const nightsLabel = (n: number) => `${n} night${n === 1 ? '' : 's'} or more`;
@@ -40,7 +41,7 @@ const nightsLabel = (n: number) => `${n} night${n === 1 ? '' : 's'} or more`;
               data-search={`${d.data.name} ${d.data.tagline} ${d.data.summary} ${d.data.bestFor} ${d.data.region}`.toLowerCase()}
             >
               <div class="place-row-photo">
-                <img src={d.data.photo.src.replace('w=1800', 'w=1200')} alt={d.data.photo.alt} loading="lazy" width="1200" height="800" />
+                <img {...responsive(d.data.photo.src, '(max-width: 860px) 100vw, 50vw', 1280)} alt={d.data.photo.alt} loading="lazy" decoding="async" width="1200" height="800" />
               </div>
               <div class="place-row-body">
                 <h2><a href={`/destinations/${d.id}/`}>{d.data.name}</a></h2>

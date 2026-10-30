@@ -20,14 +20,41 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     return next();
   }
   ctx.locals.ip = clientIp(ctx);
+  // Photos read their own bytes and need none of the saved documents, so skip that Redis round trip.
+  if (ctx.url.pathname.startsWith('/media/')) return next();
   // Load saved data for this request (Redis on Vercel) and make sure every change is saved before replying.
   await beginRequest();
   try {
-    return await guard(ctx, next);
+    return withPublicCaching(ctx, await guard(ctx, next));
   } finally {
     await endRequest();
   }
 });
+
+/**
+ * Public pages are the same for every visitor, so the CDN (Vercel's edge) keeps a copy for a minute and keeps
+ * serving it while it fetches a fresh one in the background. Visitors get pages from the edge near them instead of
+ * waiting for the server, and admin changes still show within about a minute. Browsers always check back
+ * (max-age=0), so nobody is stuck on an old page. Admin, API, pay links, errors and anything that sets a
+ * cookie are never cached.
+ */
+const PRIVATE_PREFIXES = ['/admin', '/api/', '/pay/'];
+function withPublicCaching(ctx: APIContext, res: Response): Response {
+  const path = ctx.url.pathname;
+  if (!['GET', 'HEAD'].includes(ctx.request.method)) return res;
+  if (PRIVATE_PREFIXES.some((p) => path === p.replace(/\/$/, '') || path.startsWith(p))) return res;
+  if (res.status !== 200 || res.headers.has('Cache-Control') || res.headers.has('Set-Cookie')) return res;
+  if (!(res.headers.get('Content-Type') ?? '').includes('text/html')) return res;
+  const value = 'public, max-age=0, s-maxage=60, stale-while-revalidate=86400';
+  try {
+    res.headers.set('Cache-Control', value);
+    return res;
+  } catch {
+    const copy = new Response(res.body, res);
+    copy.headers.set('Cache-Control', value);
+    return copy;
+  }
+}
 
 async function guard(ctx: APIContext, next: MiddlewareNext): Promise<Response> {
   const path = ctx.url.pathname;

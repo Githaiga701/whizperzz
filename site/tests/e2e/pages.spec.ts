@@ -125,17 +125,25 @@ test('the hero notes write themselves in, one after another, readable to screen 
   expect(fieldNotes.map((n) => n.text)).toContain(await note.locator('[data-note-sr]').textContent());
 });
 
-test('with reduced motion the note is written already and stays put', async ({ browser }) => {
+test('with reduced motion the note still writes itself (it only fades letters in, nothing moves)', async ({ browser }) => {
   const context = await browser.newContext({ reducedMotion: 'reduce' });
   const page = await context.newPage();
+  await page.clock.install();
   await page.route(/images\.unsplash\.com|translate\.google/, (r) => r.abort());
   await page.goto('/');
   const note = page.locator('.hero-whisper');
-  const text = await note.locator('[data-note-sr]').textContent();
-  await expect(note.locator('.ch:not(.on)')).toHaveCount(0);
-  await page.waitForTimeout(1500);
-  await expect(note.locator('[data-note-sr]')).toHaveText(text!);
+  await page.clock.runFor(10_000);
+  await expect(note.locator('.ch.on').first()).toBeVisible();
+  // The card itself never moves: no nudge animation when it turns.
+  await expect(note).toHaveCSS('animation-name', /soft-in|none/);
   await context.close();
+});
+
+test('public pages are cached at the edge; admin pages never are', async ({ request }) => {
+  const home = await request.get('/');
+  expect(home.headers()['cache-control']).toBe('public, max-age=0, s-maxage=60, stale-while-revalidate=86400');
+  const admin = await request.get('/admin/login/');
+  expect(admin.headers()['cache-control']).toBe('no-store');
 });
 
 test('journey pages number multi-day entries correctly', async ({ page }) => {
@@ -180,7 +188,8 @@ test.describe('landing page motion', () => {
     await expect(html).not.toHaveClass(/(^|\s)motion(\s|$)/);
     // No moving parts: the marquee, photo zoom and birds stay still, and the hero doesn't parallax.
     await expect(page.locator('.marquee-track')).toHaveCSS('animation-name', 'none');
-    await expect(page.locator('.hero-photo img')).toHaveCSS('animation-name', 'none');
+    // The photo fades in once but never zooms.
+    await expect(page.locator('.hero-photo img')).toHaveCSS('animation-name', 'soft-in');
     await expect(page.locator('.flock')).toHaveCSS('animation-name', 'none');
     // A card fades in when it reaches the screen, without moving.
     const card = page.locator('.journey-grid > .journey-card').first();

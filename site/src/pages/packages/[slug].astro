@@ -40,7 +40,7 @@ const win = dateWindow(deps.now(), rt.booking.leadDays);
 const bookable = pkg.pricing.adultKes !== null && Object.values(methods).some(Boolean);
 ---
 
-<Base title={pkg.name} description={`${pkg.days} days: ${places}. ${pkg.summary}`} heroImage={pkg.photo.src}>
+<Base title={pkg.name} description={`${pkg.days} days: ${places}. ${pkg.summary}`} heroSizes="100vw" heroImage={pkg.photo.src}>
   <PageHero title={pkg.name} kicker={`${pkg.days} days, ${places}`} intro={pkg.summary} image={pkg.photo} crumbs={[{ href: '/packages/', label: 'Journeys' }]} />
 
   <section class="section">
