@@ -338,7 +338,7 @@ body { top: 0 !important; }
 }
 
 /* The guide's note sits above the headline, in the flow, so it can never cover it.
-   Only on screens with real room beside the headline does it float top-right. */
+   On desktop widths there's room beside the headline, so it floats top-right. */
 .hero { flex-direction: column; justify-content: flex-end; align-items: stretch; }
 .hero .hero-whisper {
   position: relative;
@@ -348,7 +348,7 @@ body { top: 0 !important; }
   margin: clamp(24px, 5vw, 40px) 0 0 max(calc(var(--gutter) + 4px), calc((100% - var(--max)) / 2 + 4px));
 }
 .hero .hero-whisper + .wrap { padding-top: clamp(28px, 5vw, 48px); }
-@media (min-width: 1100px) and (min-height: 700px) {
+@media (min-width: 1100px) {
   .hero .hero-whisper { position: absolute; top: clamp(28px, 6vw, 72px); right: var(--gutter); width: 330px; margin: 0; }
   .hero .hero-whisper + .wrap { padding-top: clamp(48px, 8vw, 96px); }
 }
