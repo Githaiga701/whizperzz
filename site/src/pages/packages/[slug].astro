@@ -41,7 +41,7 @@ const bookable = pkg.pricing.adultKes !== null && Object.values(methods).some(Bo
 ---
 
 <Base title={pkg.name} description={`${pkg.days} days: ${places}. ${pkg.summary}`} heroSizes="100vw" heroImage={pkg.photo.src}>
-  <PageHero title={pkg.name} kicker={`${pkg.days} days, ${places}`} intro={pkg.summary} image={pkg.photo} crumbs={[{ href: '/packages/', label: 'Journeys' }]} />
+  <PageHero title={pkg.name} intro={`${pkg.days} days: ${places}. ${pkg.summary}`} image={pkg.photo} crumbs={[{ href: '/packages/', label: 'Journeys' }]} />
 
   <section class="section">
     <div class="wrap detail">
@@ -89,7 +89,6 @@ const bookable = pkg.pricing.adultKes !== null && Object.values(methods).some(Bo
       <section class="section section--deep book-section" id="book">
         <div class="wrap contact-grid">
           <div>
-            <span class="kicker">Ready when you are</span>
             <h2>Book it in a few minutes.</h2>
             <p class="lede">Pick your date and who’s coming, then pay {rt.booking.depositPercent > 0 && rt.booking.depositPercent < 100 ? `a ${rt.booking.depositPercent}% deposit or the full amount` : 'securely'} by M-Pesa, card{methods.crypto ? ', crypto' : ''} and more. We confirm by email and call you to fine-tune the details.</p>
             <a class="link" href="/how-to-book/">How booking works</a>
@@ -103,7 +102,6 @@ const bookable = pkg.pricing.adultKes !== null && Object.values(methods).some(Bo
   <section class={`section ${bookable ? '' : 'section--deep'}`} id="enquire">
     <div class="wrap contact-grid">
       <div>
-        <span class="kicker">{bookable ? 'Want it changed first?' : 'Like the look of it?'}</span>
         <h2>Make this one yours.</h2>
         <p class="lede">Tell us your dates and who’s coming. We’ll send back a tailored plan and a clear price, usually within a day.</p>
       </div>

@@ -7,3 +7,6 @@ node_modules/
 Thumbs.db
 __pycache__/
 .pytest_cache/
+
+# taste-skill working files (screenshots, direction sheets)
+.taste-skill/

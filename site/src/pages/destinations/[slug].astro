@@ -23,8 +23,7 @@ const names = await destinationNames();
 <Base title={d.name} description={d.summary} heroSizes="100vw" heroImage={d.photo.src}>
   <PageHero
     title={d.name}
-    kicker={d.tagline}
-    intro={d.summary}
+    intro={`${d.tagline}. ${d.summary}`}
     image={d.photo}
     crumbs={[{ href: '/destinations/', label: 'Destinations' }]}
   />

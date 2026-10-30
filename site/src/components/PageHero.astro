@@ -1,13 +1,12 @@
 ---
 interface Props {
   title: string;
-  kicker?: string | undefined;
   intro?: string | undefined;
   image?: { src: string; alt: string } | undefined;
   crumbs?: { href: string; label: string }[] | undefined;
 }
 import { responsive } from '@/lib/images';
-const { title, kicker, intro, image, crumbs } = Astro.props;
+const { title, intro, image, crumbs } = Astro.props;
 ---
 
 <section class:list={['page-hero', !image && 'page-hero--plain']}>
@@ -25,7 +24,6 @@ const { title, kicker, intro, image, crumbs } = Astro.props;
         </nav>
       )
     }
-    {kicker && <span class="kicker">{kicker}</span>}
     <h1>{title}</h1>
     {intro && <p>{intro}</p>}
     <slot />

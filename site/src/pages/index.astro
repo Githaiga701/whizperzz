@@ -57,7 +57,7 @@ const marquee = destinations.map((d) => d.data.name);
 
   <section class="section">
     <div class="wrap intro">
-      <h2 data-reveal>Come for the wild. Stay for the feeling.</h2>
+      <h2 data-reveal><span class="line">Come for the wild.</span> <span class="line">Stay for the feeling.</span></h2>
       <div>
         <p class="lede">We think the best journeys have room to breathe. So we bring together Kenya’s wide-open landscapes, local guides who know them well and stays that feel like they belong, then leave space for the unexpected.</p>
         <a class="link" href="/about/">Read our story</a>
@@ -88,7 +88,6 @@ const marquee = destinations.map((d) => d.data.name);
         <KenyaMap pins={destinations.map(toPin)} mode="links" uid="home" label="Map of Kenya showing the places we travel to" />
       </div>
       <div>
-        <span class="kicker">Where we go</span>
         <h2 id="where-title">Kenya, in all its contrast.</h2>
         <p class="lede">Open plains, cool highlands, Rift Valley lakes and the Indian Ocean, all within a day of Nairobi.</p>
         <ul class="place-list" data-place-list>

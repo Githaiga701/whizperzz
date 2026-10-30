@@ -40,7 +40,6 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
 <Base title={view ? `Pay for ${view.ref}` : 'Payment link not found'} noindex contactDock={false}>
   <PageHero
     title={done ? 'All paid. Thank you!' : closed ? 'Nothing to pay' : 'Pay for your trip'}
-    kicker="Secure payment"
     intro={view ? `Booking ${view.ref}` : undefined}
   />
 
@@ -55,8 +54,7 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
         ) : (
           <>
             <div class="pay-summary">
-              <p class="kicker">For {view.firstName}</p>
-              <p class="pay-desc">{view.description}</p>
+              <p class="pay-desc">For {view.firstName}: {view.description}</p>
               <p class="pay-amount" data-amount>{formatKes(view.amountKes)}</p>
               <dl class="facts">
                 <div><dt>Reference</dt><dd>{view.ref}</dd></div>
@@ -173,8 +171,8 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
   .pay-desc { font-size: var(--step-1); margin-bottom: 8px; }
   .pay-amount { font-family: var(--display); font-size: var(--step-4); line-height: 1; margin: 12px 0 28px; }
   .pay-panel { gap: 24px; }
-  .pay-method { display: grid; gap: 12px; padding-top: 20px; border-top: 1px solid var(--line); }
-  .pay-method:first-of-type { border-top: 0; padding-top: 0; }
+  /* Each way to pay is its own filled panel; the step in tone separates them. */
+  .pay-method { display: grid; gap: 12px; padding: 20px; background: rgba(42, 32, 23, 0.05); border-radius: var(--radius); }
   .pay-method h2 { font-size: var(--step-2); margin: 0; }
   .pay-method .button { justify-self: start; }
   .pay-status:empty { display: none; }
