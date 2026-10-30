@@ -1057,17 +1057,24 @@ body { top: 0 !important; }
 
 /* ---------- Social buttons ---------- */
 
-.social { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.social-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 14px; border-radius: 999px; font-size: 0.9375rem; font-weight: 600; text-decoration: none; border: 1.5px solid; transition: background-color 0.15s, color 0.15s, border-color 0.15s; }
-.social-btn small { font-weight: 500; font-size: 0.75rem; }
+.social { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+.social-btn {
+  display: inline-grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1.5px solid; text-decoration: none;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.social-btn svg { width: 20px; height: 20px; fill: currentColor; }
 .social--dark .social-btn { border-color: rgba(239, 230, 210, 0.35); color: var(--on-dark); }
 .social--dark a.social-btn:hover, .social--dark a.social-btn:focus-visible { background: var(--on-dark); color: var(--bark); border-color: var(--on-dark); }
 .social--light .social-btn { border-color: var(--line); color: var(--bark); background: var(--paper); }
 .social--light a.social-btn:hover, .social--light a.social-btn:focus-visible { background: var(--bark); color: var(--paper); border-color: var(--bark); }
-.social-btn.is-soon { cursor: default; border-style: dashed; }
-.social--dark .social-btn.is-soon { color: var(--on-dark-muted); }
-.social--light .social-btn.is-soon { color: var(--muted); background: transparent; }
-.site-footer .social { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Not live yet: the logo shows, faded, with a dashed ring, and can't be clicked. */
+.social-btn.is-soon { cursor: default; border-style: dashed; opacity: 0.55; }
+.social--light .social-btn.is-soon { background: transparent; }
+.social-soon { margin: 8px 0 0; font-size: var(--step--1); color: var(--muted); }
+.site-footer .social-soon { color: var(--on-dark-muted); }
+.site-footer .social { display: flex; flex-wrap: wrap; gap: 10px; }
 .site-footer a.social-btn:hover { text-decoration: none; }
 .site-footer .footer-social { margin-top: 22px; }
 .contact-follow { font-size: var(--step-1); margin: 32px 0 12px; }

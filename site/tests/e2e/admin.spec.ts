@@ -207,13 +207,16 @@ test('settings: Paystack is on, its test button works, and its webhook address c
   await expect(page.locator('.status-list li', { hasText: 'Paystack' })).toContainText('On (test key)');
 });
 
-test('social media links: “soon” until saved, then live in the footer and on Contact', async () => {
+test('social media links: faded logos until saved, then live in the footer and on Contact', async () => {
   const pub = await context.newPage();
   await pub.goto('/contact/');
-  for (const name of ['Instagram', 'TikTok', 'Facebook', 'X (Twitter)']) {
-    await expect(pub.locator('footer .social-btn', { hasText: name })).toContainText('soon');
+  for (const [key, name] of [['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['facebook', 'Facebook'], ['twitter', 'X']]) {
+    const btn = pub.locator(`footer .social-btn[data-social="${key}"]`);
+    await expect(btn).toHaveAttribute('aria-label', `${name}: coming soon`);
+    await expect(btn.locator('svg path')).toHaveCount(1);
   }
   await expect(pub.locator('footer a.social-btn')).toHaveCount(0);
+  await expect(pub.locator('footer .social-soon')).toBeVisible();
 
   await page.goto('/admin/settings/');
   const social = page.locator('#social');
@@ -225,11 +228,14 @@ test('social media links: “soon” until saved, then live in the footer and on
   await expect(flash()).toContainText('Social links saved');
 
   await pub.reload();
-  const ig = pub.locator('footer a.social-btn', { hasText: 'Instagram' });
+  const ig = pub.locator('footer a.social-btn[data-social="instagram"]');
   await expect(ig).toHaveAttribute('href', 'https://www.instagram.com/whizperztours');
   await expect(ig).toHaveAttribute('target', '_blank');
-  await expect(pub.locator('main a.social-btn', { hasText: 'Instagram' })).toBeVisible();
-  await expect(pub.locator('footer .social-btn', { hasText: 'TikTok' })).toContainText('soon');
+  await expect(ig).toHaveAccessibleName('Whizperz on Instagram (opens in a new tab)');
+  await expect(pub.locator('main a.social-btn[data-social="instagram"]')).toBeVisible();
+  await expect(pub.locator('footer .social-btn[data-social="tiktok"]')).toHaveClass(/is-soon/);
+  // With one network live, the "coming soon" line goes away; the faded logos still say so on their own.
+  await expect(pub.locator('footer .social-soon')).toHaveCount(0);
 
   // Emptying the box puts it back to “soon”.
   await page.locator('#social').getByLabel('Instagram').fill('');
