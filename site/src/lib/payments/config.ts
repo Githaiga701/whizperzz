@@ -237,13 +237,21 @@ export function loadPaymentConfig(raw: Record<string, string | undefined>): Paym
   ]);
   if (mpesaMissing.length === 0) {
     const secret = env.MPESA_CALLBACK_SECRET!;
+    const baseUrl = env.MPESA_BASE_URL ?? MPESA_URLS[env.MPESA_ENV ?? mode];
+    // Daraja's sandbox shortcode 174379 is a Paybill. Sending a Till (Buy Goods) payment to it fails with
+    // "Invalid TransactionType", so in the sandbox the till number is set aside until you go live.
+    let tillNumber = env.MPESA_TILL_NUMBER;
+    if (tillNumber && env.MPESA_SHORTCODE === '174379' && baseUrl === MPESA_URLS.sandbox) {
+      warnings.push('M-Pesa: the till number is ignored in the sandbox, because test shortcode 174379 is a Paybill. It is used again when you switch to live.');
+      tillNumber = undefined;
+    }
     mpesa = {
-      baseUrl: env.MPESA_BASE_URL ?? MPESA_URLS[env.MPESA_ENV ?? mode],
+      baseUrl,
       consumerKey: env.MPESA_CONSUMER_KEY!,
       consumerSecret: env.MPESA_CONSUMER_SECRET!,
       shortcode: env.MPESA_SHORTCODE!,
       passkey: env.MPESA_PASSKEY!,
-      tillNumber: env.MPESA_TILL_NUMBER,
+      tillNumber,
       callbackSecret: secret,
       callbackUrl: `${siteUrl}/api/callbacks/mpesa/${encodeURIComponent(secret)}`,
       reversal:

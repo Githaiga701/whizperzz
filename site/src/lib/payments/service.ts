@@ -299,6 +299,9 @@ export function explainMpesaError(message: string): string {
   if (m.includes('access token') || m.includes('invalid credentials') || m.includes('oauth') || m.includes('401') || m.includes('consumer')) {
     return 'Safaricom didn’t accept the consumer key and secret. Re-copy them from the Daraja app, and check sandbox keys are used with Sandbox (live keys with Live).';
   }
+  if (m.includes('transactiontype') || m.includes('transaction type')) {
+    return 'The till number doesn’t match the shortcode. For a Paybill, leave the till number empty. For a Till (Buy Goods), the shortcode must be your store (head office) number and the till number your till, with that store’s passkey.';
+  }
   if (m.includes('merchant does not exist') || m.includes('shortcode') || m.includes('partyb') || m.includes('passkey') || m.includes('password') || m.includes('500.001.1001')) {
     return 'The shortcode, passkey or till number don’t match. In sandbox use shortcode 174379 with Daraja’s test passkey and leave the till number empty.';
   }

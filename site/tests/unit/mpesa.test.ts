@@ -193,6 +193,20 @@ describe('explaining M-Pesa failures', async () => {
     expect(explainMpesaError('mpesa error: Invalid Access Token')).toMatch(/consumer key and secret/);
     expect(explainMpesaError('mpesa error: Bad Request - Invalid CallBackURL')).toMatch(/callback address/);
     expect(explainMpesaError('mpesa error: Merchant does not exist')).toMatch(/shortcode, passkey/);
+    expect(explainMpesaError('mpesa error: Bad Request - Invalid TransactionType')).toMatch(/till number/);
     expect(explainMpesaError('Could not reach mpesa: fetch failed')).toMatch(/couldn’t connect/);
+  });
+});
+
+describe('till numbers in the sandbox', () => {
+  const keys = { SITE_URL: 'https://tours.example.com', MPESA_CONSUMER_KEY: 'k', MPESA_CONSUMER_SECRET: 's', MPESA_PASSKEY: 'p', MPESA_CALLBACK_SECRET: 'cb', MPESA_TILL_NUMBER: '5432100' };
+  it('sets the till aside on test Paybill 174379, so prompts still go out', () => {
+    const c = loadPaymentConfig({ ...keys, MPESA_SHORTCODE: '174379' });
+    expect(c.mpesa?.tillNumber).toBeUndefined();
+    expect(c.warnings.join(' ')).toMatch(/till number is ignored in the sandbox/);
+  });
+  it('keeps the till when live', () => {
+    const c = loadPaymentConfig({ ...keys, MPESA_SHORTCODE: '7654321', PAYMENTS_MODE: 'production' });
+    expect(c.mpesa?.tillNumber).toBe('5432100');
   });
 });
