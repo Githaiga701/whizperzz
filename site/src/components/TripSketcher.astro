@@ -35,7 +35,7 @@ const data = destinations.map((d) => ({
 
     <div class="sketcher-panel">
       <span class="kicker">Your trip, your way</span>
-      <h2 id="sketch-title">{title}</h2>
+      <h2 id="sketch-title" tabindex="-1">{title}</h2>
       <p>{intro}</p>
 
       <fieldset class="stop-picker">
@@ -87,6 +87,7 @@ const data = destinations.map((d) => ({
 <script>
   import { NAIROBI, routePath, type Point } from '@/lib/geo';
   import { emailUrl, formatEnquiry, openWhatsApp, whatsappUrl } from '@/lib/enquiry';
+  import { trackSubmitter } from '@/lib/client/forms';
 
   interface Place extends Point {
     id: string;
@@ -115,6 +116,7 @@ const data = destinations.map((d) => ({
     const form = root.querySelector<HTMLFormElement>('[data-sketch-form]')!;
     const status = root.querySelector<HTMLElement>('[data-status]')!;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const submitterOf = trackSubmitter(form);
 
     let stops: Stop[] = load();
 
@@ -154,8 +156,25 @@ const data = destinations.map((d) => ({
       b.textContent = text;
       b.setAttribute('aria-label', label);
       b.disabled = disabled;
-      b.addEventListener('click', onClick);
+      b.addEventListener('click', () => {
+        onClick();
+        refocus(label);
+      });
       return b;
+    }
+
+    /**
+     * The route list is rebuilt after every change, which removes the button that was just pressed. Put keyboard
+     * focus back on the same control (found by its label), or on the nearest sensible one if it no longer applies.
+     */
+    function refocus(label: string) {
+      const buttons = [...list.querySelectorAll<HTMLButtonElement>('button')];
+      const same = buttons.find((b) => b.getAttribute('aria-label') === label && !b.disabled);
+      const place = label.replace(/^(Fewer nights in|More nights in|Move|Remove) /, '').replace(/ earlier$/, '');
+      const sameStop = buttons.find((b) => !b.disabled && (b.getAttribute('aria-label') ?? '').includes(place));
+      const target = same ?? sameStop ?? buttons.find((b) => !b.disabled);
+      if (target) target.focus({ preventScroll: true });
+      else root!.querySelector<HTMLElement>('#sketch-title')?.focus({ preventScroll: true });
     }
 
     function homeRow(label: string) {
@@ -259,7 +278,7 @@ const data = destinations.map((d) => ({
         style: String(fd.get('style') ?? '') || undefined,
         ...(travellers ? { travellers } : {}),
       });
-      const via = (e.submitter as HTMLButtonElement | null)?.value;
+      const via = submitterOf(e as SubmitEvent)?.value;
       const url = via === 'email' ? emailUrl('My Whizperz route', text) : whatsappUrl(text);
       if (!url) {
         status.textContent = 'That contact option isn’t set up yet. Please use the other button.';

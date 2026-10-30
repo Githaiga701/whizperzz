@@ -76,6 +76,8 @@ const nav = [
       <slot />
     </main>
     <script>
+      import { trackSubmitter } from '@/lib/client/forms';
+
       // On a phone the menu is one row that scrolls sideways: bring the current page's tab into view.
       const current = document.querySelector<HTMLElement>('.admin-nav [aria-current="page"]');
       const navRow = current?.parentElement;
@@ -84,10 +86,11 @@ const nav = [
       }
       // "Copy" buttons: <button data-copy="#input-id">
       document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((btn) => {
+        const label = btn.textContent;
+        let reset: number | undefined;
         btn.addEventListener('click', async () => {
           const input = document.querySelector<HTMLInputElement>(btn.dataset['copy']!);
           if (!input) return;
-          const old = btn.textContent;
           try {
             await navigator.clipboard.writeText(input.value);
             btn.textContent = 'Copied';
@@ -97,13 +100,21 @@ const nav = [
             input.select();
             btn.textContent = 'Press Ctrl+C';
           }
-          setTimeout(() => (btn.textContent = old), 1600);
+          // Always back to the original label, even after several quick clicks.
+          window.clearTimeout(reset);
+          reset = window.setTimeout(() => (btn.textContent = label), 1600);
         });
       });
       // Buttons that need a second click: <button data-confirm="Cancel this quote?">
-      document.querySelectorAll<HTMLButtonElement>('[data-confirm]').forEach((btn) => {
-        btn.form?.addEventListener('submit', (e) => {
-          if ((e.submitter as HTMLElement | null) === btn && !window.confirm(btn.dataset['confirm']!)) e.preventDefault();
+      // Works out the pressed button itself, because older Safari doesn't say which one it was and the question
+      // was being skipped there.
+      const forms = new Set([...document.querySelectorAll<HTMLButtonElement>('[data-confirm]')].map((b) => b.form).filter((f) => f !== null));
+      forms.forEach((form) => {
+        const submitterOf = trackSubmitter(form);
+        form.addEventListener('submit', (e) => {
+          const btn = submitterOf(e);
+          const question = btn?.dataset['confirm'];
+          if (question && !window.confirm(question)) e.preventDefault();
         });
       });
     </script>

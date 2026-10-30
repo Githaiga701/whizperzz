@@ -186,6 +186,8 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
 </style>
 
 <script>
+  import { OFFLINE, onReturn, readJson } from '@/lib/client/forms';
+
   type Status = 'awaiting_payment' | 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'error';
   interface StatusReply {
     status: Status;
@@ -211,15 +213,27 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
         statusEl.append(r);
       }
     };
-    const busy = (on: boolean) => forms.forEach((f) => f.setAttribute('aria-busy', String(on)));
+    const mpesaForm = panel.querySelector<HTMLFormElement>('[data-pay-mpesa]');
+    /**
+     * Switches the pay buttons off while a request is on its way, so a double tap can't send two M-Pesa prompts
+     * or open two payment sessions. While we wait for the M-Pesa PIN only that button stays off; the others work,
+     * in case the guest would rather pay another way.
+     */
+    const busy = (on: boolean, only?: HTMLFormElement | null) =>
+      forms.forEach((f) => {
+        const off = on && (!only || f === only);
+        f.setAttribute('aria-busy', String(off));
+        f.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.disabled = off));
+      });
 
     async function post(path: string, body: Record<string, string>): Promise<{ ok: boolean; data: Record<string, string> }> {
+      let res: Response;
       try {
-        const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        return { ok: res.ok, data: await res.json() };
+        res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       } catch {
-        return { ok: false, data: { message: 'Couldn’t connect. Check your internet connection and try again.' } };
+        return { ok: false, data: { message: OFFLINE } };
       }
+      return { ok: res.ok, data: (await readJson<Record<string, string>>(res)) as Record<string, string> };
     }
 
     async function poll() {
@@ -252,11 +266,11 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
 
     function startPolling(minutes = 3) {
       pollUntil = Date.now() + minutes * 60_000;
-      busy(true);
+      busy(true, mpesaForm);
       pollTimer = window.setTimeout(poll, 2500);
     }
 
-    panel.querySelector<HTMLFormElement>('[data-pay-mpesa]')?.addEventListener('submit', async (e) => {
+    mpesaForm?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const phone = String(new FormData(e.currentTarget as HTMLFormElement).get('phone') ?? '');
       busy(true);
@@ -304,5 +318,9 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
     });
 
     if (panel.dataset['initial'] === 'pending') startPolling(Number(panel.dataset['wait'] ?? 3));
+
+    // Back from a payment provider's page: the browser may restore this page as it was left (buttons off, an old
+    // status). Load it fresh so the guest sees whether the payment went through.
+    onReturn(() => window.location.reload());
   }
 </script>

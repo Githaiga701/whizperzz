@@ -143,6 +143,7 @@ const choices = [
 
 <script>
   import { calculatePrice, kes, PriceError, travellersLabel, type PricingRules } from '@/lib/packages/pricing';
+  import { OFFLINE, onReturn, readJson } from '@/lib/client/forms';
 
   interface Config {
     pricing: PricingRules;
@@ -247,8 +248,9 @@ const choices = [
       submit.disabled = true;
       form.setAttribute('aria-busy', 'true');
       status.textContent = val('method') === 'mpesa' ? 'Saving your booking and sending the M-Pesa prompt…' : 'Saving your booking…';
+      let res: Response;
       try {
-        const res = await fetch('/api/book', {
+        res = await fetch('/api/book', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -263,15 +265,28 @@ const choices = [
             phone: val('phone'),
           }),
         });
-        const data = (await res.json()) as { next?: string; message?: string };
-        if (!res.ok || !data.next) throw new Error(data.message ?? 'Something went wrong. Please try again.');
-        window.location.assign(data.next);
-      } catch (err) {
-        status.textContent = (err as Error).message.includes('fetch') ? 'Couldn’t connect. Check your internet connection and try again.' : (err as Error).message;
-        submit.disabled = false;
-        form.removeAttribute('aria-busy');
+      } catch {
+        // The request never reached the server (Chrome says "Failed to fetch", Safari "Load failed").
+        release(OFFLINE);
+        return;
       }
+      const data = await readJson<{ next?: string }>(res);
+      if (!res.ok || !data.next) {
+        release(data.message ?? 'Something went wrong. Please try again.');
+        return;
+      }
+      window.location.assign(data.next);
     });
+
+    /** Switches the button back on (update() decides whether the current choices allow it), then shows `message`. */
+    function release(message = '') {
+      form!.removeAttribute('aria-busy');
+      update();
+      if (message) status.textContent = message;
+    }
+
+    // Coming back with the browser's Back button restores the page as it was left (button switched off), so reset it.
+    onReturn(() => release());
 
     update();
   }

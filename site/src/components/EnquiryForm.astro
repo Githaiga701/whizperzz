@@ -42,9 +42,11 @@ const { journey, heading = 'Tell us about your trip' } = Astro.props;
 
 <script>
   import { emailUrl, formatEnquiry, openWhatsApp, whatsappUrl } from '@/lib/enquiry';
+  import { trackSubmitter } from '@/lib/client/forms';
 
   document.querySelectorAll<HTMLFormElement>('[data-enquiry]').forEach((form) => {
     const status = form.querySelector<HTMLElement>('[data-status]')!;
+    const submitterOf = trackSubmitter(form);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(form);
@@ -58,7 +60,7 @@ const { journey, heading = 'Tell us about your trip' } = Astro.props;
         travellers: Number(fd.get('travellers')) || undefined,
         message: get('message'),
       });
-      const via = (e.submitter as HTMLButtonElement | null)?.value;
+      const via = submitterOf(e as SubmitEvent)?.value;
       const subject = journey ? `Enquiry: ${journey}` : 'Trip enquiry';
       const url = via === 'email' ? emailUrl(subject, text) : whatsappUrl(text);
       if (!url) {
