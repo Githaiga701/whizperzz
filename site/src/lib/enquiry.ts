@@ -45,6 +45,23 @@ export function whatsappUrl(text: string): string | null {
   return digits ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}` : null;
 }
 
+/**
+ * Opens a WhatsApp link from a button press. Phones and tablets go there in the same tab (wa.me hands over to the
+ * app, and in-app browsers like Instagram's often block new windows). Computers get a new tab, falling back to the
+ * same tab if the browser blocked it, so the button never silently does nothing.
+ */
+export function openWhatsApp(url: string): void {
+  const touch = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+  if (!touch) {
+    const tab = window.open(url, '_blank');
+    if (tab) {
+      tab.opener = null;
+      return;
+    }
+  }
+  window.location.href = url;
+}
+
 export function emailUrl(subject: string, text: string): string | null {
   return site.contact.email
     ? `mailto:${site.contact.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`

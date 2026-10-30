@@ -86,7 +86,7 @@ const data = destinations.map((d) => ({
 
 <script>
   import { NAIROBI, routePath, type Point } from '@/lib/geo';
-  import { emailUrl, formatEnquiry, whatsappUrl } from '@/lib/enquiry';
+  import { emailUrl, formatEnquiry, openWhatsApp, whatsappUrl } from '@/lib/enquiry';
 
   interface Place extends Point {
     id: string;
@@ -266,7 +266,7 @@ const data = destinations.map((d) => ({
         return;
       }
       if (via === 'email') location.href = url;
-      else window.open(url, '_blank', 'noopener');
+      else openWhatsApp(url);
       status.textContent = via === 'email' ? 'Your email app should open with the route ready to send.' : 'WhatsApp should open with your route ready to send.';
     });
 
