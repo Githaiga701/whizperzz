@@ -10,6 +10,9 @@ export const prerender = false;
 const rt = getRuntime();
 if (!rt.users.hasUsers()) return Astro.redirect('/admin/setup/');
 const next = safeNext(Astro.url.searchParams.get('next'));
+const expired = Astro.url.searchParams.get('expired') === '1';
+// After an expired session, go back to the page they were on and ask it to put back what they'd typed.
+const after = expired ? `${next}?restore=1` : next;
 if (Astro.locals.admin) return Astro.redirect(next);
 
 let error = '';
@@ -27,23 +30,25 @@ if (Astro.request.method === 'POST') {
     if (user) {
       clearLoginFailures(key);
       startSession(Astro.cookies, rt.sessionKey, user, isHttps(Astro.request, Astro.url));
-      return Astro.redirect(next);
+      return Astro.redirect(after);
     }
     recordLoginFailure(key);
     error = 'Wrong username or password.';
   }
 }
-const flash = error ? { kind: 'error' as const, text: error } : takeFlash(Astro.cookies);
+const flash = error
+  ? { kind: 'error' as const, text: error }
+  : (takeFlash(Astro.cookies) ?? (expired ? { kind: 'error' as const, text: 'Your session expired. For your security, please log in again to continue. If you were in the middle of something, we’ll put back what you’d typed.' } : undefined));
 ---
 
 <Admin title="Log in" bare flash={flash}>
   <a class="brand" href="/"><Logo /><span class="brand-name">whizperz<small>Admin</small></span></a>
   <div class="panel">
-    <h1>Log in</h1>
-    <form method="post" class="admin-form">
-      <label class="field">Username<input name="username" value={username} autocomplete="username" required autofocus /></label>
-      <label class="field">Password<input name="password" type="password" autocomplete="current-password" required /></label>
-      <button class="button" type="submit">Log in</button>
+    <h1>{expired ? 'Log in to continue' : 'Log in'}</h1>
+    <form method="post" class="admin-form" data-validate data-no-draft>
+      <label class="field">Username<input name="username" value={username} autocomplete="username" required autofocus data-error-required="Enter your username." /></label>
+      <label class="field">Password<input name="password" type="password" autocomplete="current-password" required data-error-required="Enter your password." /></label>
+      <button class="button" type="submit" data-pending="Logging in…">{expired ? 'Log in and continue' : 'Log in'}</button>
     </form>
     <p class="hint" style="margin-top:16px">Forgot your password? Ask another admin to reset it on the Users page. If nobody can log in, use <a href="/admin/setup/?recover=1">recover access</a>.</p>
   </div>

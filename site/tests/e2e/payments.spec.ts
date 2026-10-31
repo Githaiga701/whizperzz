@@ -69,9 +69,19 @@ test.describe('paying with M-Pesa', () => {
   test('a wrong number is caught before anything is sent', async ({ page, request }) => {
     const { quote } = await newQuote(request);
     await page.goto(`/pay/${quote.ref}/`);
-    await page.getByLabel('Safaricom number').fill('12345');
+    let sent = 0;
+    await page.route('**/api/pay/mpesa', (route) => {
+      sent++;
+      return route.continue();
+    });
+    const phone = page.getByLabel('Safaricom number');
+    await phone.fill('12345');
     await page.getByRole('button', { name: 'Send M-Pesa prompt' }).click();
-    await expect(page.locator('[data-pay-status]')).toHaveText('Enter a Safaricom number, like 0712 345 678.');
+    // Caught in the browser, beside the field, before anything is sent. (The server checks again: see the API tests.)
+    await expect(phone).toHaveAccessibleDescription('Enter a Safaricom number like 0712 345 678.');
+    await expect(phone).toHaveAttribute('aria-invalid', 'true');
+    await expect(phone).toBeFocused();
+    expect(sent).toBe(0);
   });
 
   test('amounts over the M-Pesa limit only offer card', async ({ page, request }) => {

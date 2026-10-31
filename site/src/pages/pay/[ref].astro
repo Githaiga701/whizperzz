@@ -90,7 +90,7 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
                       <h2>Pay with M-Pesa</h2>
                       <label class="field">
                         Safaricom number
-                        <input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" required />
+                        <input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" required data-error-required="Enter the Safaricom number to pay from." />
                       </label>
                       <button class="button button--whatsapp" type="submit">Send M-Pesa prompt</button>
                       <p class="form-note">You’ll get a prompt on your phone to enter your PIN. Nothing is charged until you do.</p>
@@ -101,7 +101,7 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
                       <h2>Pay by card</h2>
                       <label class="field">
                         Email for your receipt
-                        <input name="email" type="email" autocomplete="email" required />
+                        <input name="email" type="email" autocomplete="email" required data-error-required="Enter your email address for the receipt." />
                       </label>
                       <button class="button" type="submit">Continue to card payment</button>
                       <p class="form-note">Visa, Mastercard and mobile money, through Pesapal’s secure page.</p>
@@ -112,7 +112,7 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
                       <h2>Pay with Paystack</h2>
                       <label class="field">
                         Email for your Paystack receipt
-                        <input name="email" type="email" autocomplete="email" required />
+                        <input name="email" type="email" autocomplete="email" required data-error-required="Enter your email address for the receipt." />
                       </label>
                       <button class="button" type="submit">Continue to Paystack</button>
                       <p class="form-note">Visa, Mastercard, M-Pesa and Apple Pay on Paystack’s secure page (part of Stripe). Charged in Kenyan shillings.</p>
@@ -123,7 +123,7 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
                       <h2>Pay with iPOS Pay</h2>
                       <label class="field">
                         Email for your iPOS Pay receipt
-                        <input name="email" type="email" autocomplete="email" required />
+                        <input name="email" type="email" autocomplete="email" required data-error-required="Enter your email address for the receipt." />
                       </label>
                       <button class="button" type="submit">Continue to iPOS Pay</button>
                       <p class="form-note">Card payment in US dollars ({usd}), on iPOSpays’ secure page. Good for cards issued outside Kenya.</p>
@@ -145,7 +145,7 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
                       <h2>Pay with crypto</h2>
                       <label class="field">
                         Email for your crypto receipt
-                        <input name="email" type="email" autocomplete="email" required />
+                        <input name="email" type="email" autocomplete="email" required data-error-required="Enter your email address for the receipt." />
                       </label>
                       <button class="button" type="submit">Continue to crypto payment</button>
                       <p class="form-note">USDT, USDC, Bitcoin, Ethereum and more through NOWPayments. Priced at {usd}; you pay the network fee.</p>
@@ -158,7 +158,16 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
                 <p>Online payment isn’t switched on yet. Message us and we’ll send payment details for this booking.</p>
               )}
 
-              {!done && help && <p class="form-note">Stuck? <a class="link" href={help} target="_blank" rel="noopener noreferrer">Ask us on WhatsApp</a></p>}
+              <div class="pay-next" data-paid-next hidden={!done}>
+                <h2>What happens next</h2>
+                <p>Keep your reference, <strong>{view.ref}</strong>. We’ll be in touch about your trip, and you can message us any time with questions.</p>
+                <div class="button-row">
+                  <a class="button" href="/packages/">See more journeys</a>
+                  {help && <a class="button button--ghost" href={help} target="_blank" rel="noopener noreferrer">Message us</a>}
+                </div>
+              </div>
+
+              {!done && help && <p class="form-note" data-help>Stuck? <a class="link" href={help} target="_blank" rel="noopener noreferrer">Ask us on WhatsApp</a></p>}
             </div>
           </>
         )
@@ -181,12 +190,18 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
   .pay-status[data-state='failed'], .pay-status[data-state='error'] { background: rgba(155, 61, 28, 0.12); color: #6e2a12; }
   .pay-receipt { display: block; margin-top: 6px; font-weight: 600; }
   [aria-busy='true'] .button { opacity: 0.6; pointer-events: none; }
+  .pay-status[data-state='offline'] { background: rgba(42, 32, 23, 0.08); }
+  .pay-next h2 { font-size: var(--step-2); margin: 0 0 8px; }
+  .pay-next p { margin: 0 0 12px; }
 </style>
 
 <script>
-  import { OFFLINE, onReturn, readJson } from '@/lib/client/forms';
+  import { onReturn, readJson } from '@/lib/client/forms';
+  import { backoff, onConnectivity, request } from '@/lib/client/network';
+  import { attachValidation } from '@/lib/client/validate';
+  import { normalizeKenyanPhone } from '@/lib/payments/phone';
 
-  type Status = 'awaiting_payment' | 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'error';
+  type Status = 'awaiting_payment' | 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'error' | 'offline';
   interface StatusReply {
     status: Status;
     message: string;
@@ -200,6 +215,13 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
     const forms = [...panel.querySelectorAll<HTMLFormElement>('form')];
     let pollTimer: number | undefined;
     let pollUntil = 0;
+    let polling = false;
+    let pollFailures = 0;
+    /** While offline the wait clock stops, so coming back online doesn't land on "gave up waiting". */
+    let offlineSince: number | null = null;
+
+    // Inline errors on every pay form, registered before the submit handlers below.
+    forms.forEach((f) => attachValidation(f, { phone: (v) => (normalizeKenyanPhone(v) ? '' : 'Enter a Safaricom number like 0712 345 678.') }));
 
     const show = (state: Status, message: string, receipt?: string | null) => {
       statusEl.dataset['state'] = state;
@@ -224,95 +246,150 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
         f.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.disabled = off));
       });
 
-    async function post(path: string, body: Record<string, string>): Promise<{ ok: boolean; data: Record<string, string> }> {
-      let res: Response;
-      try {
-        res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      } catch {
-        return { ok: false, data: { message: OFFLINE } };
+    type PostResult = { kind: 'reply'; ok: boolean; data: Record<string, string> } | { kind: 'offline' | 'timeout' };
+
+    async function post(path: string, body: Record<string, string>): Promise<PostResult> {
+      const outcome = await request(
+        path,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+        { timeoutMs: 30_000, onSlow: () => show('pending', 'Still working on it. Your connection seems slow, so please keep this page open.') },
+      );
+      if (outcome.kind === 'reply') return { kind: 'reply', ok: outcome.res.ok, data: (await readJson<Record<string, string>>(outcome.res)) as Record<string, string> };
+      return { kind: outcome.kind === 'timeout' ? 'timeout' : 'offline' };
+    }
+
+    function paid(reply: StatusReply) {
+      show('paid', reply.message, reply.receipt);
+      forms.forEach((f) => (f.hidden = true));
+      panel!.querySelector<HTMLElement>('[data-help]')?.setAttribute('hidden', '');
+      panel!.querySelector<HTMLElement>('[data-paid-next]')?.removeAttribute('hidden');
+      const h1 = document.querySelector<HTMLElement>('h1');
+      if (h1) {
+        h1.textContent = 'All paid. Thank you!';
+        // Move focus to the news, so screen reader users hear it and keyboard users start from the top.
+        h1.tabIndex = -1;
+        h1.focus();
       }
-      return { ok: res.ok, data: (await readJson<Record<string, string>>(res)) as Record<string, string> };
+      polling = false;
     }
 
     async function poll() {
       window.clearTimeout(pollTimer);
+      if (!polling) return;
+      const outcome = await request(`/api/pay/status?ref=${encodeURIComponent(ref)}`, { cache: 'no-store' }, { timeoutMs: 15_000 });
+      if (outcome.kind === 'offline') {
+        offlineSince ??= Date.now();
+        show('offline', 'You’re offline. If you’ve entered your PIN, the payment still goes through. We’ll check again as soon as you’re back online.');
+        return; // onConnectivity below picks it up again.
+      }
       let reply: StatusReply | undefined;
-      try {
-        const res = await fetch(`/api/pay/status?ref=${encodeURIComponent(ref)}`, { cache: 'no-store' });
-        if (res.ok) reply = await res.json();
-      } catch {
-        /* try again below */
+      if (outcome.kind === 'reply' && outcome.res.ok) {
+        try {
+          reply = (await outcome.res.json()) as StatusReply;
+        } catch {
+          /* try again below */
+        }
       }
-      if (reply?.status === 'paid') {
-        show('paid', reply.message, reply.receipt);
-        forms.forEach((f) => (f.hidden = true));
-        document.querySelector('h1')!.textContent = 'All paid. Thank you!';
-        return;
-      }
+      if (reply?.status === 'paid') return paid(reply);
       if (reply && reply.status !== 'pending') {
+        polling = false;
         show(reply.status, reply.message);
         busy(false);
         return;
       }
       if (Date.now() > pollUntil) {
+        polling = false;
         show('error', 'Still waiting for confirmation. If you’ve paid, there’s no need to pay again. Refresh this page in a minute, or message us.');
         busy(false);
         return;
       }
-      pollTimer = window.setTimeout(poll, 3000);
+      if (reply) {
+        pollFailures = 0;
+        if (statusEl.dataset['state'] === 'offline') show('pending', reply.message);
+      } else pollFailures++;
+      // Every 3 s while things are working; back off if the server is struggling.
+      pollTimer = window.setTimeout(poll, pollFailures ? backoff(pollFailures - 1, 3000, 20_000) : 3000);
     }
 
     function startPolling(minutes = 3) {
       pollUntil = Date.now() + minutes * 60_000;
+      polling = true;
+      pollFailures = 0;
       busy(true, mpesaForm);
       pollTimer = window.setTimeout(poll, 2500);
     }
+
+    onConnectivity((up) => {
+      if (!up || !polling || offlineSince === null) return;
+      pollUntil += Date.now() - offlineSince;
+      offlineSince = null;
+      show('pending', 'Back online. Checking for your payment…');
+      void poll();
+    });
 
     mpesaForm?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const phone = String(new FormData(e.currentTarget as HTMLFormElement).get('phone') ?? '');
       busy(true);
       show('pending', 'Sending the payment prompt…');
-      const { ok, data } = await post('/api/pay/mpesa', { ref, phone });
-      if (!ok) {
-        show('failed', data['message'] ?? 'Something went wrong. Please try again.');
+      const result = await post('/api/pay/mpesa', { ref, phone });
+      if (result.kind === 'offline' && navigator.onLine === false) {
+        show('failed', 'You’re offline, so the prompt wasn’t sent. Connect to the internet and press the button again.');
         busy(false);
         return;
       }
-      show('pending', data['message'] ?? 'Check your phone.');
+      if (result.kind !== 'reply') {
+        // The prompt may have gone out. Sending another could ask for the money twice, so we check instead.
+        show('pending', 'We couldn’t confirm the prompt was sent. If one arrives on your phone, enter your PIN. We’re checking for your payment.');
+        startPolling();
+        return;
+      }
+      if (!result.ok) {
+        show('failed', result.data['message'] ?? 'We couldn’t send the prompt. Please try again.');
+        busy(false);
+        return;
+      }
+      show('pending', result.data['message'] ?? 'Check your phone.');
       startPolling();
     });
 
-    const names: Record<string, string> = { paystack: 'Paystack', ipos: 'iPOS Pay', unipesa: 'Unipesa', crypto: 'crypto' };
-    panel.querySelectorAll<HTMLFormElement>('[data-pay-gateway]').forEach((form) => {
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const method = form.dataset['payGateway']!;
-        const email = String(new FormData(form).get('email') ?? '');
-        busy(true);
-        show('pending', `Opening the secure ${names[method] ?? ''} payment page…`);
-        const { ok, data } = await post('/api/pay/gateway', { ref, method, email });
-        if (!ok || !data['redirectUrl']) {
-          show('failed', data['message'] ?? 'Something went wrong. Please try again.');
-          busy(false);
-          return;
-        }
-        window.location.assign(data['redirectUrl']);
-      });
-    });
-
-    panel.querySelector<HTMLFormElement>('[data-pay-card]')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = String(new FormData(e.currentTarget as HTMLFormElement).get('email') ?? '');
+    /** Card and other providers: we only open their checkout page, so a failed request never charged anything. */
+    async function openCheckout(path: string, body: Record<string, string>, name: string) {
       busy(true);
-      show('pending', 'Opening the secure card payment page…');
-      const { ok, data } = await post('/api/pay/card', { ref, email });
-      if (!ok || !data['redirectUrl']) {
-        show('failed', data['message'] ?? 'Something went wrong. Please try again.');
+      show('pending', `Opening the secure ${name} payment page…`);
+      const result = await post(path, body);
+      if (result.kind !== 'reply') {
+        show(
+          'failed',
+          result.kind === 'offline'
+            ? `You seem to be offline, so the ${name} page didn’t open and nothing was charged. Press the button again once you’re connected.`
+            : `The ${name} page took too long to open. Nothing was charged. Please press the button again.`,
+        );
         busy(false);
         return;
       }
-      window.location.assign(data['redirectUrl']);
+      if (!result.ok || !result.data['redirectUrl']) {
+        show('failed', result.data['message'] ?? `We couldn’t open the ${name} page. Please try again.`);
+        busy(false);
+        return;
+      }
+      window.location.assign(result.data['redirectUrl']);
+    }
+
+    const names: Record<string, string> = { paystack: 'Paystack', ipos: 'iPOS Pay', unipesa: 'Unipesa', crypto: 'crypto' };
+    panel.querySelectorAll<HTMLFormElement>('[data-pay-gateway]').forEach((form) => {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const method = form.dataset['payGateway']!;
+        const email = String(new FormData(form).get('email') ?? '');
+        void openCheckout('/api/pay/gateway', { ref, method, email }, names[method] ?? '');
+      });
+    });
+
+    panel.querySelector<HTMLFormElement>('[data-pay-card]')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const email = String(new FormData(e.currentTarget as HTMLFormElement).get('email') ?? '');
+      void openCheckout('/api/pay/card', { ref, email }, 'card');
     });
 
     if (panel.dataset['initial'] === 'pending') startPolling(Number(panel.dataset['wait'] ?? 3));

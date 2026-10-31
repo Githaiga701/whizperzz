@@ -79,6 +79,8 @@ export interface Booking {
   balanceRef?: string;
   /** On a balance quote: the original booking. */
   parentRef?: string;
+  /** The booking form's attempt id, so a retried request returns this booking instead of making another. */
+  attemptId?: string;
 }
 
 export interface Quote {

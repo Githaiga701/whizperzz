@@ -102,7 +102,8 @@ test.describe('filters', () => {
     await expect(rows.first()).toBeVisible();
     await page.getByPlaceholder('Search places').fill('penguins');
     await expect(rows).toHaveCount(0);
-    await expect(page.locator('.empty-results')).toBeVisible();
+    await expect(page.locator('[data-no-results]')).toBeVisible();
+    await expect(page.locator('[data-no-results] h2')).toHaveText('No places match “penguins”');
   });
 
   test('journeys filter by length', async ({ page }) => {

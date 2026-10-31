@@ -138,6 +138,23 @@ describe('bookPackage', () => {
     expect((await deps.store.get(res.ref))!.amountKes).toBe(250_000);
   });
 
+  it('never books the same attempt twice (a retry after a slow connection, a double tap)', async () => {
+    const { deps, packages, cfg, daraja } = await setup();
+    const first = await bookPackage(deps, packages, cfg, booking({ attemptId: 'attempt-1234-abcd' }));
+    const again = await bookPackage(deps, packages, cfg, booking({ attemptId: 'attempt-1234-abcd' }));
+    expect(again).toEqual({ ref: first.ref, next: `/pay/${first.ref}/` });
+    expect(await deps.store.list()).toHaveLength(1);
+    // Only one M-Pesa prompt: the repeat goes to the pay page, which checks the status itself.
+    expect(daraja.stkPush).toHaveBeenCalledTimes(1);
+
+    // A new attempt (the guest changed something) is a new booking.
+    const other = await bookPackage(deps, packages, cfg, booking({ attemptId: 'attempt-5678-efgh' }));
+    expect(other.ref).not.toBe(first.ref);
+    // A malformed id is ignored rather than trusted.
+    await bookPackage(deps, packages, cfg, booking({ attemptId: '<script>' }));
+    expect(await deps.store.list()).toHaveLength(3);
+  });
+
   it('sends card payers to Pesapal checkout for the full amount', async () => {
     const { deps, packages, cfg, pesapal } = await setup();
     const res = await bookPackage(deps, packages, cfg, booking({ method: 'card', plan: 'full', phone: '' }));

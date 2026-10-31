@@ -30,7 +30,8 @@ const choices = [
 ] as const;
 ---
 
-<form class="booking" data-booking data-config={JSON.stringify(config)} novalidate>
+<form class="booking" id="booking-form" data-booking data-config={JSON.stringify(config)} novalidate>
+  <div data-error-summary hidden></div>
   <div class="booking-head">
     <h2>Book this journey</h2>
     <p class="booking-from">
@@ -42,7 +43,7 @@ const choices = [
     <legend><span class="step-n" aria-hidden="true">1</span> When and who</legend>
     <label class="field">
       Start date
-      <input type="date" name="travelDate" min={dateMin} max={dateMax} required />
+      <input type="date" name="travelDate" min={dateMin} max={dateMax} required data-error-required="Choose the date you’d like to start." />
     </label>
     <div class="booking-counts">
       <div class="counter">
@@ -119,11 +120,11 @@ const choices = [
 
   <fieldset class="booking-step">
     <legend><span class="step-n" aria-hidden="true">{deposits ? 4 : 3}</span> Your details</legend>
-    <label class="field">Full name<input name="name" autocomplete="name" required maxlength="80" /></label>
-    <label class="field">Email <span class="hint">for your receipt</span><input name="email" type="email" autocomplete="email" required /></label>
+    <label class="field">Full name<input name="name" autocomplete="name" required maxlength="80" data-error-required="Enter your full name." /></label>
+    <label class="field">Email <span class="hint">for your receipt</span><input name="email" type="email" autocomplete="email" required data-error-required="Enter your email address so we can send your receipt." /></label>
     <label class="field" data-phone-field>
       <span data-phone-label>M-Pesa number</span>
-      <input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" />
+      <input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" data-error-required="Enter the Safaricom number to pay from." />
     </label>
   </fieldset>
 
@@ -136,14 +137,17 @@ const choices = [
     <p class="total-note" data-total-note></p>
   </div>
 
-  <p class="form-status" data-status role="alert"></p>
+  <p class="form-status" data-status role="status" aria-live="polite"></p>
   <button class="button booking-submit" type="submit" data-submit>Book and pay</button>
   <p class="form-note">Secure payment by Safaricom M-Pesa or Pesapal. We never see your PIN or card details. Free to ask questions first: <a class="link" href="#enquire">send an enquiry</a>.</p>
 </form>
 
 <script>
   import { calculatePrice, kes, PriceError, travellersLabel, type PricingRules } from '@/lib/packages/pricing';
-  import { OFFLINE, onReturn, readJson } from '@/lib/client/forms';
+  import { onReturn, readJson } from '@/lib/client/forms';
+  import { attemptId, request } from '@/lib/client/network';
+  import { attachValidation } from '@/lib/client/validate';
+  import { normalizeKenyanPhone } from '@/lib/payments/phone';
 
   interface Config {
     pricing: PricingRules;
@@ -166,6 +170,17 @@ const choices = [
     const phoneLabel = $<HTMLElement>('[data-phone-label]')!;
     const val = (name: string) => (new FormData(form).get(name) as string | null) ?? '';
 
+    // Inline errors. Registered before the submit handler below, so a form with mistakes never gets sent.
+    attachValidation(form, {
+      phone: (v) => (val('method') === 'mpesa' && !normalizeKenyanPhone(v) ? 'Enter a Safaricom number like 0712 345 678.' : ''),
+      name: (v) => (v.length < 2 ? 'Enter your full name.' : ''),
+    });
+
+    // One id per set of choices. A retry of the same booking reuses it, so the server can't book it twice;
+    // changing anything starts a new one.
+    let attempt = attemptId();
+    let sending = false;
+
     const clamp = (input: HTMLInputElement) => {
       const min = Number(input.min || 0);
       const max = Number(input.max || 99);
@@ -174,7 +189,7 @@ const choices = [
     };
 
     function update() {
-      status.textContent = '';
+      setStatus('');
       const method = val('method');
       phoneInput.required = method === 'mpesa';
       phoneLabel.textContent = method === 'mpesa' ? 'M-Pesa number' : 'Phone (optional)';
@@ -216,13 +231,13 @@ const choices = [
         }
         const overMpesa = method === 'mpesa' && price.payNowKes > cfg.mpesaMax;
         submit.disabled = overMpesa;
-        if (overMpesa) status.textContent = `M-Pesa allows up to ${kes(cfg.mpesaMax)} per payment. Choose card${price.plan === 'full' && cfg.depositPercent > 0 ? ' or pay a deposit' : ''}.`;
+        if (overMpesa) setStatus(`M-Pesa allows up to ${kes(cfg.mpesaMax)} per payment. Choose card${price.plan === 'full' && cfg.depositPercent > 0 ? ' or pay a deposit' : ''}.`, 'error');
       } catch (err) {
         payNow.textContent = '—';
         lines.innerHTML = '';
         note.textContent = '';
         submit.disabled = true;
-        if (err instanceof PriceError) status.textContent = err.message;
+        if (err instanceof PriceError) setStatus(err.message, 'error');
       }
     }
 
@@ -230,27 +245,41 @@ const choices = [
       btn.addEventListener('click', () => {
         const [name, delta] = btn.dataset['step']!.split(':');
         const input = form.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+        if (sending) return;
         input.value = String(Number(input.value) + Number(delta));
         clamp(input);
+        attempt = attemptId();
         update();
       });
     });
-    form.addEventListener('input', update);
+    form.addEventListener('input', () => {
+      if (sending) return;
+      attempt = attemptId();
+      update();
+    });
     form.addEventListener('change', (e) => {
+      if (sending) return;
+      attempt = attemptId();
       const t = e.target as HTMLInputElement;
       if (t.type === 'number') clamp(t);
       update();
     });
 
+    function setStatus(message: string, tone: 'info' | 'error' = 'info') {
+      status.textContent = message;
+      status.dataset['tone'] = tone;
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!form.reportValidity()) return;
+      if (sending) return;
+      sending = true;
       submit.disabled = true;
       form.setAttribute('aria-busy', 'true');
-      status.textContent = val('method') === 'mpesa' ? 'Saving your booking and sending the M-Pesa prompt…' : 'Saving your booking…';
-      let res: Response;
-      try {
-        res = await fetch('/api/book', {
+      setStatus(val('method') === 'mpesa' ? 'Saving your booking and sending the M-Pesa prompt…' : 'Saving your booking…');
+      const outcome = await request(
+        '/api/book',
+        {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -263,26 +292,35 @@ const choices = [
             name: val('name'),
             email: val('email'),
             phone: val('phone'),
+            attemptId: attempt,
           }),
-        });
-      } catch {
-        // The request never reached the server (Chrome says "Failed to fetch", Safari "Load failed").
-        release(OFFLINE);
+        },
+        { timeoutMs: 60_000, onSlow: () => setStatus('Still working on it. Your connection seems slow, so please keep this page open.') },
+      );
+      if (outcome.kind === 'offline') {
+        release('You seem to be offline, so we couldn’t send your booking. Your details are still here: press the button again once you’re connected. You won’t be booked twice.');
         return;
       }
-      const data = await readJson<{ next?: string }>(res);
-      if (!res.ok || !data.next) {
-        release(data.message ?? 'Something went wrong. Please try again.');
+      if (outcome.kind !== 'reply') {
+        // The server may have saved it. The same attempt id is sent again, so pressing again is safe.
+        release('We didn’t hear back in time, so your booking may already be saved. Press the button again: you won’t be booked twice.');
         return;
       }
+      const data = await readJson<{ next?: string }>(outcome.res);
+      if (!outcome.res.ok || !data.next) {
+        release(data.message ?? 'We couldn’t save your booking. Please try again.');
+        return;
+      }
+      setStatus(val('method') === 'mpesa' ? 'Booked. Taking you to your payment page…' : 'Booked. Taking you to the secure payment page…');
       window.location.assign(data.next);
     });
 
     /** Switches the button back on (update() decides whether the current choices allow it), then shows `message`. */
     function release(message = '') {
+      sending = false;
       form!.removeAttribute('aria-busy');
       update();
-      if (message) status.textContent = message;
+      if (message) setStatus(message, 'error');
     }
 
     // Coming back with the browser's Back button restores the page as it was left (button switched off), so reset it.

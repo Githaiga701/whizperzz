@@ -12,7 +12,7 @@ const { journey, heading = 'Tell us about your trip' } = Astro.props;
 <form class="enquiry-form" data-enquiry data-journey={journey}>
   <h2 style="font-size:var(--step-2);margin:0">{heading}</h2>
   <div class="two">
-    <label class="field">Your name<input name="name" autocomplete="name" required /></label>
+    <label class="field">Your name<input name="name" autocomplete="name" required data-error-required="Enter your name so we know who’s asking." /></label>
     <label class="field"><span>Email <span style="font-weight:400;color:var(--muted)">(optional)</span></span><input name="email" type="email" autocomplete="email" /></label>
   </div>
   <div class="two">
@@ -23,11 +23,11 @@ const { journey, heading = 'Tell us about your trip' } = Astro.props;
         {MONTHS.map((m) => <option>{m}</option>)}
       </select>
     </label>
-    <label class="field">Travellers<input name="travellers" type="number" min="1" max="40" inputmode="numeric" placeholder="2" /></label>
+    <label class="field">Travellers<input name="travellers" type="number" min="1" max="40" inputmode="numeric" placeholder="2" data-error-min="At least 1 traveller." data-error-max="For groups over 40, tell us in the message instead." /></label>
   </div>
   <label class="field">
     What are you hoping for?
-    <textarea name="message" rows="4" required placeholder={journey ? 'Dates, who’s coming, anything you’d like to change…' : 'Places, dates, who’s coming, the kind of trip you love…'}></textarea>
+    <textarea name="message" rows="4" required data-error-required="Tell us a little about the trip you have in mind." placeholder={journey ? 'Dates, who’s coming, anything you’d like to change…' : 'Places, dates, who’s coming, the kind of trip you love…'}></textarea>
   </label>
   <div class="button-row">
     <button class="button button--whatsapp" type="submit" value="whatsapp">
@@ -43,10 +43,12 @@ const { journey, heading = 'Tell us about your trip' } = Astro.props;
 <script>
   import { emailUrl, formatEnquiry, openWhatsApp, whatsappUrl } from '@/lib/enquiry';
   import { trackSubmitter } from '@/lib/client/forms';
+  import { attachValidation } from '@/lib/client/validate';
 
   document.querySelectorAll<HTMLFormElement>('[data-enquiry]').forEach((form) => {
     const status = form.querySelector<HTMLElement>('[data-status]')!;
     const submitterOf = trackSubmitter(form);
+    attachValidation(form);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(form);

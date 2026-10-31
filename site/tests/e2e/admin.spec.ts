@@ -683,6 +683,87 @@ test('every admin screen fits a phone without sideways scrolling', async () => {
   await phone.close();
 });
 
+test('a form shows it is saving and can’t be sent twice', async () => {
+  await page.goto('/admin/quotes/new/');
+  // Slow the save down so there's time to press again.
+  await page.route('**/admin/quotes/new/', async (route) => {
+    if (route.request().method() === 'POST') await new Promise((r) => setTimeout(r, 1500));
+    await route.continue();
+  });
+  await page.getByLabel('Guest name').fill('Double Tap');
+  await page.getByLabel('Amount (KES)').fill('5000');
+  await page.getByLabel(/^Trip description/).fill('Two clicks test');
+  // Press, look at the button while it saves, press again. (Inside the page: the browser is mid-navigation.)
+  const seen = await page.evaluate(
+    () =>
+      new Promise<{ disabled: boolean; text: string }>((resolve) => {
+        const b = document.querySelector<HTMLButtonElement>('form.admin-form button[type="submit"]')!;
+        b.click();
+        setTimeout(() => {
+          b.click();
+          resolve({ disabled: b.disabled, text: b.textContent ?? '' });
+        }, 100);
+      }),
+  );
+  expect(seen).toEqual({ disabled: true, text: 'Creating quote…' });
+  await expect(page).toHaveURL(/\/admin\/quotes\/WZ-/);
+  await page.unroute('**/admin/quotes/new/');
+  const made = (await (await page.request.get('/api/admin/quotes')).json()) as { quotes: { guestName: string }[] };
+  expect(made.quotes.filter((q) => q.guestName === 'Double Tap')).toHaveLength(1);
+});
+
+test('admin forms: inline errors, and nothing is sent while offline', async () => {
+  await page.goto('/admin/quotes/new/');
+  await page.getByLabel('Amount (KES)').fill('lots');
+  await page.getByRole('button', { name: 'Create quote' }).click();
+  await expect(page.locator('[data-error-summary]')).toContainText('Please fix 3 things');
+  await expect(page.getByLabel('Amount (KES)')).toHaveAccessibleDescription('Use numbers only, like 85000.');
+
+  await page.getByLabel('Guest name').fill('Offline Olivia');
+  await page.getByLabel('Amount (KES)').fill('5000');
+  await page.getByLabel(/^Trip description/).fill('Offline test');
+  await context.setOffline(true);
+  await page.getByRole('button', { name: 'Create quote' }).click();
+  await expect(page.locator('form.admin-form [data-form-status]')).toContainText('You’re offline. Nothing was saved');
+  await expect(page.locator('[data-net-banner]')).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/quotes\/new\/$/);
+  await expect(page.getByLabel('Guest name')).toHaveValue('Offline Olivia');
+  await context.setOffline(false);
+  await expect(page.locator('[data-net-banner]')).toContainText('Back online', { timeout: 10_000 });
+});
+
+test('an expired login: log in again and carry on where you were, with what you typed put back', async () => {
+  await page.goto('/admin/quotes/new/');
+  await page.getByLabel('Guest name').fill('Session Sam');
+  await page.getByLabel('Amount (KES)').fill('7000');
+  await page.getByLabel(/^Trip description/).fill('Typed before the login ran out');
+  // The login runs out while they type.
+  await context.clearCookies({ name: 'wz_admin' });
+  await page.getByRole('button', { name: 'Create quote' }).click();
+
+  await expect(page).toHaveURL(/\/admin\/login\/\?next=%2Fadmin%2Fquotes%2Fnew%2F&expired=1$/);
+  await expect(flash()).toContainText('Your session expired. For your security, please log in again to continue.');
+  await expect(page.getByRole('heading', { name: 'Log in to continue' })).toBeVisible();
+  await page.getByLabel('Username').fill('spence');
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Log in and continue' }).click();
+
+  // Back on the same page (no ?restore left in the address), with the typing back and a note to check it.
+  await expect(page).toHaveURL(/\/admin\/quotes\/new\/$/);
+  await expect(page.locator('[data-draft-restored]')).toContainText('We put back what you’d typed');
+  await expect(page.getByLabel('Guest name')).toHaveValue('Session Sam');
+  await expect(page.getByLabel('Amount (KES)')).toHaveValue('7000');
+  await expect(page.getByLabel(/^Trip description/)).toHaveValue('Typed before the login ran out');
+  // Nothing was created while logged out.
+  const quotes = (await (await page.request.get('/api/admin/quotes')).json()) as { quotes: { guestName: string }[] };
+  expect(quotes.quotes.some((q) => q.guestName === 'Session Sam')).toBe(false);
+
+  // A later normal visit doesn't bring the old typing back.
+  await page.reload();
+  await expect(page.getByLabel('Guest name')).toHaveValue('');
+  await expect(page.locator('[data-draft-restored]')).toHaveCount(0);
+});
+
 test('change your own password, log out and back in', async () => {
   await page.goto('/admin/users/');
   const form = page.locator('section', { hasText: 'Change your password' });

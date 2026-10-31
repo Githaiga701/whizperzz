@@ -40,45 +40,125 @@ const { options, searchLabel, noun, duration = false, target } = Astro.props;
 </div>
 
 <script>
+  import { suggestSpelling } from '@/lib/client/search';
+
   document.querySelectorAll<HTMLElement>('[data-filter]').forEach((bar) => {
     const list = document.querySelector<HTMLElement>(bar.dataset['target']!);
     if (!list) return;
     const items = [...list.querySelectorAll<HTMLElement>('[data-filter-item]')];
+    // Nothing to filter: the page shows its own empty state instead.
+    if (items.length === 0) {
+      bar.hidden = true;
+      return;
+    }
     const [one, many] = (bar.dataset['noun'] ?? 'item|items').split('|');
     const count = bar.querySelector<HTMLElement>('[data-filter-count]')!;
     const search = bar.querySelector<HTMLInputElement>('[data-filter-search]')!;
     const days = bar.querySelector<HTMLSelectElement>('[data-filter-days]');
     const tags = [...bar.querySelectorAll<HTMLButtonElement>('[data-filter-tag]')];
-    const empty = document.createElement('p');
-    empty.className = 'empty-results';
-    empty.textContent = `No ${many} match that. Try another word or filter, or just ask us.`;
+    const tagLabel = new Map(tags.map((t) => [t.dataset['filterTag'] ?? 'all', t.textContent?.trim() ?? '']));
+    const vocabulary = [...new Set(items.flatMap((i) => (i.dataset['search'] ?? '').split(/[^\p{L}\p{N}'’-]+/u)).filter((w) => w.length >= 3))];
+
+    // "No results" panel: what was searched, a spelling suggestion, filters that do have results, and a way out.
+    const empty = document.createElement('div');
+    empty.className = 'empty-state no-results';
+    empty.setAttribute('data-no-results', '');
     empty.hidden = true;
+    empty.innerHTML = `
+      <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <h2 data-nr-title></h2>
+      <p data-nr-text></p>
+      <p class="suggest" data-nr-suggest hidden>Did you mean <button type="button" class="text-button" data-nr-fix></button>?</p>
+      <div data-nr-alts hidden><p>Or try:</p><div class="chip-row" data-nr-alt-list></div></div>
+      <div class="button-row"><button type="button" class="button button--ghost" data-nr-clear>Clear search and filters</button><a class="button" href="/plan/">Ask us to plan it</a></div>`;
     list.after(empty);
+    const $ = <T extends HTMLElement>(sel: string) => empty.querySelector<T>(sel)!;
 
     let tag = 'all';
     const lengthOk = (d: number, v: string) =>
       v === 'all' || (v === 'short' && d <= 3) || (v === 'medium' && d >= 4 && d <= 6) || (v === 'long' && d >= 7);
+    const matches = (item: HTMLElement, q: string, t: string, len: string) =>
+      (t === 'all' || (item.dataset['tags'] ?? '').split(' ').includes(t)) &&
+      (item.dataset['search'] ?? '').includes(q) &&
+      lengthOk(Number(item.dataset['days'] ?? 0), len);
+    const countFor = (q: string, t: string, len: string) => items.filter((i) => matches(i, q, t, len)).length;
+
+    const setTag = (value: string) => {
+      tag = value;
+      tags.forEach((t) => t.setAttribute('aria-pressed', String((t.dataset['filterTag'] ?? 'all') === value)));
+    };
+
+    function explain(q: string, len: string) {
+      const filtered = tag !== 'all' || len !== 'all';
+      $('[data-nr-title]').textContent = q ? `No ${many} match “${search.value.trim()}”` : `No ${many} match these filters`;
+      $('[data-nr-text]').textContent = filtered
+        ? `Nothing fits ${q ? 'that search with ' : ''}the filters you’ve picked. Change a filter, clear them, or ask us: we plan trips that aren’t listed here all the time.`
+        : `Check the spelling or try a broader word, like a place or an animal. Or ask us: we plan trips that aren’t listed here all the time.`;
+
+      const fix = q ? suggestSpelling(q, vocabulary) : null;
+      const fixCount = fix ? countFor(fix, tag, len) || countFor(fix, 'all', 'all') : 0;
+      $('[data-nr-suggest]').hidden = !(fix && fixCount);
+      if (fix && fixCount) $('[data-nr-fix]').textContent = fix;
+
+      // Other filters that would show something for the same search.
+      const altList = $('[data-nr-alt-list]');
+      altList.replaceChildren();
+      const options: { label: string; apply: () => void; n: number }[] = [];
+      if (len !== 'all' && countFor(q, tag, 'all')) options.push({ label: 'Any length', n: countFor(q, tag, 'all'), apply: () => days && (days.value = 'all') });
+      for (const [value, label] of tagLabel) {
+        if (value === tag || value === 'all') continue;
+        const n = countFor(q, value, len);
+        if (n) options.push({ label, n, apply: () => setTag(value) });
+      }
+      if (tag !== 'all' && countFor(q, 'all', len)) options.unshift({ label: tagLabel.get('all') ?? 'All', n: countFor(q, 'all', len), apply: () => setTag('all') });
+      for (const o of options.slice(0, 5)) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = `${o.label} (${o.n})`;
+        b.addEventListener('click', () => {
+          o.apply();
+          update();
+          search.focus();
+        });
+        altList.append(b);
+      }
+      $('[data-nr-alts]').hidden = options.length === 0;
+    }
 
     const update = () => {
       const q = search.value.trim().toLowerCase();
       const len = days?.value ?? 'all';
       let shown = 0;
       items.forEach((item) => {
-        const ok =
-          (tag === 'all' || (item.dataset['tags'] ?? '').split(' ').includes(tag)) &&
-          (item.dataset['search'] ?? '').includes(q) &&
-          lengthOk(Number(item.dataset['days'] ?? 0), len);
+        const ok = matches(item, q, tag, len);
         item.hidden = !ok;
         if (ok) shown++;
       });
       count.textContent = `Showing ${shown} ${shown === 1 ? one : many}`;
       empty.hidden = shown > 0;
+      if (shown === 0) explain(q, len);
     };
+
+    $('[data-nr-fix]').addEventListener('click', (e) => {
+      search.value = (e.currentTarget as HTMLElement).textContent ?? '';
+      if (countFor(search.value.toLowerCase(), tag, days?.value ?? 'all') === 0) {
+        setTag('all');
+        if (days) days.value = 'all';
+      }
+      update();
+      search.focus();
+    });
+    $('[data-nr-clear]').addEventListener('click', () => {
+      search.value = '';
+      setTag('all');
+      if (days) days.value = 'all';
+      update();
+      search.focus();
+    });
 
     tags.forEach((b) =>
       b.addEventListener('click', () => {
-        tag = b.dataset['filterTag'] ?? 'all';
-        tags.forEach((t) => t.setAttribute('aria-pressed', String(t === b)));
+        setTag(b.dataset['filterTag'] ?? 'all');
         update();
       }),
     );

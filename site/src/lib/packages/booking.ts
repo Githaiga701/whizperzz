@@ -28,7 +28,15 @@ export interface BookInput {
   name?: unknown;
   email?: unknown;
   phone?: unknown;
+  /**
+   * A random id the booking form makes for each attempt. If the same attempt arrives again (a retry after a slow
+   * connection, a double tap), we return the booking already made instead of making a second one.
+   */
+  attemptId?: unknown;
 }
+
+/** How long a repeated attempt is recognised. */
+export const ATTEMPT_WINDOW_MS = 30 * 60_000;
 
 export interface BookResult {
   ref: string;
@@ -68,6 +76,17 @@ export function prettyDate(iso: string): string {
  * and start the payment they chose. The amount never comes from the browser.
  */
 export async function bookPackage(deps: PaymentDeps, packages: PackageStore, cfg: BookingConfig, input: BookInput): Promise<BookResult> {
+  const attemptId = typeof input.attemptId === 'string' && /^[\w-]{8,64}$/.test(input.attemptId) ? input.attemptId : undefined;
+  if (attemptId) {
+    const since = deps.now().getTime() - ATTEMPT_WINDOW_MS;
+    const earlier = (await deps.store.list()).find((q) => q.booking?.attemptId === attemptId && Date.parse(q.createdAt) >= since);
+    if (earlier) {
+      deps.log('info', 'Repeated booking attempt; returning the first booking', { ref: earlier.ref });
+      // Same booking, same pay page. Its own buttons (and status check) take it from here, so no second M-Pesa prompt.
+      return { ref: earlier.ref, next: new URL(payUrl(deps.config, earlier.ref)).pathname };
+    }
+  }
+
   const pkg = typeof input.packageId === 'string' ? await packages.get(input.packageId) : undefined;
   if (!pkg || !pkg.published) throw new PaymentError(404, 'not_found', 'That journey isn’t available to book.');
 
@@ -127,6 +146,7 @@ export async function bookPackage(deps: PaymentDeps, packages: PackageStore, cfg
       plan,
       depositPercent: price.depositPercent,
       balanceKes: price.balanceKes,
+      ...(attemptId ? { attemptId } : {}),
     };
     const first = q.history?.[0];
     if (first) first.text = `Booked online: ${pkg.name}, ${travellersLabel(price.adults, price.children)}, ${prettyDate(travelDate)}. Total ${kes(price.totalKes)}; paying ${plan === 'deposit' ? `a ${price.depositPercent}% deposit of ${kes(price.payNowKes)}` : `in full (${kes(price.payNowKes)})`}.`;
