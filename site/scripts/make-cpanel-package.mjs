@@ -10,7 +10,7 @@ import { join } from 'node:path';
 const root = process.cwd();
 const out = join(root, 'cpanel-upload');
 const archive = join(root, 'whizperz-cpanel.tar.gz');
-const siteUrl = (process.env.SITE_URL || 'https://tours.whizperzpizza.co.ke').replace(/\/+$/, '');
+const siteUrl = (process.env.SITE_URL || 'https://whizperzdawntours.com').replace(/\/+$/, '');
 
 console.log(`\n  Building the site for ${siteUrl} ...\n`);
 execSync('npx astro build', { stdio: 'inherit', env: { ...process.env, SITE_URL: siteUrl } });

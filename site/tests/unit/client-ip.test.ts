@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { behindProxy, clientIp } from '@/lib/server/client-ip';
 import { isLocalRequest } from '@/lib/admin/web';
 
-const req = (headers: Record<string, string> = {}) => new Request('https://tours.whizperzpizza.co.ke/', { headers });
+const req = (headers: Record<string, string> = {}) => new Request('https://whizperzdawntours.com/', { headers });
 
 describe('visitor IP behind cPanel', () => {
   it('uses the socket address when not behind a proxy', () => {

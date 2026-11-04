@@ -229,7 +229,7 @@ const status = [
       <input type="hidden" name="action" value="save_general" />
       <label class="field">
         <span>Site address {!siteUrl && process.env['SITE_URL'] && <span class="source"> · from environment</span>}</span>
-        <span class="hint">The public address guests visit, e.g. https://tours.whizperzpizza.co.ke. Pay links and payment results use it.</span>
+        <span class="hint">The public address guests visit, e.g. https://whizperzdawntours.com. Pay links and payment results use it.</span>
         <input name="siteUrl" value={siteUrl} placeholder={process.env['SITE_URL'] ?? detectedUrl} />
       </label>
       {!siteUrl && <p class="hint" style="margin:0">You’re using this site at <span class="code">{detectedUrl}</span>. If that’s the public address, type it above.</p>}
@@ -481,7 +481,7 @@ const status = [
         <SettingField name="pass" label="Password" secret source={src('email', 'pass')} />
       </div>
       <div class="two">
-        <SettingField name="from" label="Send from" placeholder="Whizperz Tours <bookings@whizperzpizza.co.ke>" value={s.email?.from} source={src('email', 'from')} />
+        <SettingField name="from" label="Send from" placeholder="Whizperz Tours <bookings@whizperzdawntours.com>" value={s.email?.from} source={src('email', 'from')} />
         <SettingField name="notifyTo" label="Send payment alerts to" hint="Your team’s address. Leave empty for no alerts." value={s.email?.notifyTo} source={src('email', 'notifyTo')} envValue={envOf('email', 'notifyTo')} />
       </div>
       <div class="actions"><button class="button button--small" type="submit">Save email</button></div>

@@ -293,7 +293,7 @@ export function mpesaCallbackProblem(config: PaymentConfig): string | undefined 
 export function explainMpesaError(message: string): string {
   const m = message.toLowerCase();
   if (m.includes("safaricom can't reach")) {
-    return 'The site address isn’t public. Set Settings → Site address to the live https address (e.g. https://tours.whizperzpizza.co.ke).';
+    return 'The site address isn’t public. Set Settings → Site address to the live https address (e.g. https://whizperzdawntours.com).';
   }
   if (m.includes('callback')) return 'Safaricom rejected the callback address. Check Settings → Site address is the live https address.';
   if (m.includes('access token') || m.includes('invalid credentials') || m.includes('oauth') || m.includes('401') || m.includes('consumer')) {

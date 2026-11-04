@@ -11,7 +11,7 @@ if errorlevel 1 (
   pause
   goto end
 )
-if "%SITE_URL%"=="" set SITE_URL=https://tours.whizperzpizza.co.ke
+if "%SITE_URL%"=="" set SITE_URL=https://whizperzdawntours.com
 call npm install --no-audit --no-fund --loglevel=error
 if errorlevel 1 goto failed
 node scripts\make-cpanel-package.mjs

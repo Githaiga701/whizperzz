@@ -8,7 +8,7 @@ const onVercel = Boolean(process.env.VERCEL);
 
 export default defineConfig({
   // The public address, used for canonical links. Set SITE_URL when building for another address.
-  site: process.env.SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://tours.whizperzpizza.co.ke'),
+  site: process.env.SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://whizperzdawntours.com'),
   trailingSlash: 'ignore',
   // Every page is made on the server, so things saved in the admin (journeys, prices, social links) show at once.
   output: 'server',
