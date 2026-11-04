@@ -1,4 +1,23 @@
+import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { test, expect } from './fixtures';
+
+/**
+ * Presses a WhatsApp button and returns the wa.me address it opened. Computers open it in a new tab; phones go
+ * there in the same tab (in-app browsers block new windows), so this accepts either. WhatsApp itself is stubbed.
+ */
+async function openedWhatsApp(page: Page, context: BrowserContext, button: Locator): Promise<URL> {
+  await context.route('https://wa.me/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: 'WhatsApp' }));
+  const newTab = context.waitForEvent('page').then(async (p) => {
+    await p.waitForURL(/wa\.me/);
+    return p.url();
+  });
+  const sameTab = page.waitForURL(/wa\.me/).then(() => page.url());
+  // Only one of the two happens; keep the other from reporting a timeout after the test is done.
+  newTab.catch(() => undefined);
+  sameTab.catch(() => undefined);
+  await button.click();
+  return new URL(await Promise.race([newTab, sameTab]));
+}
 
 test.describe('route sketcher', () => {
   test('builds a route from the map and the list, and sends it on WhatsApp', async ({ page, context }) => {
@@ -19,9 +38,9 @@ test.describe('route sketcher', () => {
 
     await sketch.locator('select[name="month"]').selectOption('August');
     await sketch.locator('input[name="travellers"]').fill('4');
-    const [popup] = await Promise.all([context.waitForEvent('page'), sketch.getByRole('button', { name: 'Send route on WhatsApp' }).click()]);
-    const text = new URL(popup.url()).searchParams.get('text')!;
-    expect(popup.url()).toContain('wa.me/254795144687');
+    const wa = await openedWhatsApp(page, context, sketch.getByRole('button', { name: 'Send route on WhatsApp' }));
+    const text = wa.searchParams.get('text')!;
+    expect(wa.href).toContain('wa.me/254795144687');
     expect(text).toContain('My route (8 nights): Nairobi → Diani Coast (4) → Maasai Mara (4) → Nairobi');
     expect(text).toContain('When: August');
     expect(text).toContain('Travellers: 4');
@@ -72,11 +91,13 @@ test.describe('enquiry forms', () => {
     await form.locator('input[name="name"]').fill('Jane Wanjiku');
     await form.locator('textarea[name="message"]').fill('Mara in August for two');
     await form.locator('select[name="month"]').selectOption('August');
-    const [popup] = await Promise.all([context.waitForEvent('page'), form.getByRole('button', { name: 'Send on WhatsApp' }).click()]);
-    const text = new URL(popup.url()).searchParams.get('text')!;
+    const desktop = !(await page.evaluate(() => matchMedia('(hover: none) and (pointer: coarse)').matches));
+    const wa = await openedWhatsApp(page, context, form.getByRole('button', { name: 'Send on WhatsApp' }));
+    const text = wa.searchParams.get('text')!;
     expect(text).toContain('Mara in August for two');
     expect(text).toContain('Jane Wanjiku');
-    await expect(form.locator('[data-status]')).toContainText('WhatsApp should open');
+    // On a computer the form stays open in this tab and says what happened; a phone has moved on to WhatsApp.
+    if (desktop) await expect(form.locator('[data-status]')).toContainText('WhatsApp should open');
   });
 
   test('journey enquiry includes the journey name', async ({ page, context }) => {
@@ -84,8 +105,8 @@ test.describe('enquiry forms', () => {
     const form = page.locator('[data-enquiry]');
     await form.locator('input[name="name"]').fill('Ali');
     await form.locator('textarea[name="message"]').fill('Can we add Lamu?');
-    const [popup] = await Promise.all([context.waitForEvent('page'), form.getByRole('button', { name: 'Send on WhatsApp' }).click()]);
-    expect(new URL(popup.url()).searchParams.get('text')).toContain('Journey: Saltwater days');
+    const wa = await openedWhatsApp(page, context, form.getByRole('button', { name: 'Send on WhatsApp' }));
+    expect(wa.searchParams.get('text')).toContain('Journey: Saltwater days');
   });
 });
 

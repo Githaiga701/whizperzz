@@ -5,6 +5,7 @@ import { SOCIAL_ICONS } from '@/lib/social-icons';
 /**
  * Buttons for Whizperz's social accounts, shown as each network's own logo. A network with no saved link is faded,
  * marked "coming soon" and isn't clickable, so visitors never land on a broken or wrong page.
+ * Until at least one link is saved, nothing is shown at all (no placeholder logos or "coming soon" text).
  * Links are added in Admin → Settings → Social media.
  */
 interface Props {
@@ -18,6 +19,7 @@ const noneYet = links.every((l) => !l.url);
 const shortName = (label: string) => label.replace(/\s*\(.*\)$/, '');
 ---
 
+{!noneYet && (
 <div class:list={['social-wrap', className]}>
   <ul class:list={['social', `social--${tone}`]} aria-label="Whizperz on social media">
     {
@@ -36,5 +38,5 @@ const shortName = (label: string) => label.replace(/\s*\(.*\)$/, '');
       ))
     }
   </ul>
-  {noneYet && <p class="social-soon">Our social pages are coming soon.</p>}
 </div>
+)}

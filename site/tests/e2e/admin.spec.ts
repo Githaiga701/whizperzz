@@ -207,16 +207,13 @@ test('settings: Paystack is on, its test button works, and its webhook address c
   await expect(page.locator('.status-list li', { hasText: 'Paystack' })).toContainText('On (test key)');
 });
 
-test('social media links: faded logos until saved, then live in the footer and on Contact', async () => {
+test('social media links: hidden until one is saved, then live in the footer and on Contact', async () => {
   const pub = await context.newPage();
   await pub.goto('/contact/');
-  for (const [key, name] of [['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['facebook', 'Facebook'], ['twitter', 'X']]) {
-    const btn = pub.locator(`footer .social-btn[data-social="${key}"]`);
-    await expect(btn).toHaveAttribute('aria-label', `${name}: coming soon`);
-    await expect(btn.locator('svg path')).toHaveCount(1);
-  }
-  await expect(pub.locator('footer a.social-btn')).toHaveCount(0);
-  await expect(pub.locator('footer .social-soon')).toBeVisible();
+  // Nothing at all until a link is saved: no placeholder logos, no "coming soon", no "Follow along" heading.
+  await expect(pub.locator('.social-btn')).toHaveCount(0);
+  await expect(pub.getByText(/coming soon/i)).toHaveCount(0);
+  await expect(pub.getByRole('heading', { name: 'Follow along' })).toHaveCount(0);
 
   await page.goto('/admin/settings/');
   const social = page.locator('#social');
@@ -233,15 +230,17 @@ test('social media links: faded logos until saved, then live in the footer and o
   await expect(ig).toHaveAttribute('target', '_blank');
   await expect(ig).toHaveAccessibleName('Whizperz on Instagram (opens in a new tab)');
   await expect(pub.locator('main a.social-btn[data-social="instagram"]')).toBeVisible();
-  await expect(pub.locator('footer .social-btn[data-social="tiktok"]')).toHaveClass(/is-soon/);
-  // With one network live, the "coming soon" line goes away; the faded logos still say so on their own.
-  await expect(pub.locator('footer .social-soon')).toHaveCount(0);
+  await expect(pub.getByRole('heading', { name: 'Follow along' })).toBeVisible();
+  // Networks not saved yet show faded beside the live one, and can't be clicked.
+  const tiktok = pub.locator('footer .social-btn[data-social="tiktok"]');
+  await expect(tiktok).toHaveClass(/is-soon/);
+  await expect(tiktok).toHaveAttribute('aria-label', 'TikTok: coming soon');
 
   // Emptying the box puts it back to “soon”.
   await page.locator('#social').getByLabel('Instagram').fill('');
   await page.locator('#social').getByRole('button', { name: 'Save social links' }).click();
   await pub.reload();
-  await expect(pub.locator('footer a.social-btn')).toHaveCount(0);
+  await expect(pub.locator('.social-btn')).toHaveCount(0);
   await pub.close();
 });
 

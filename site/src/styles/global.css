@@ -524,8 +524,9 @@ body { top: 0 !important; }
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 4px 16px;
-  padding: 16px 18px;
-  margin-inline: -18px;
+  /* The hover tint reaches into the page margin, but never past the screen edge (small phones have a 16px margin). */
+  padding: 16px min(18px, var(--gutter));
+  margin-inline: calc(-1 * min(18px, var(--gutter)));
   border-radius: var(--radius);
   text-decoration: none;
   transition: background-color 0.2s;
@@ -1067,8 +1068,6 @@ body { top: 0 !important; }
 /* Not live yet: the logo shows, faded, with a dashed ring, and can't be clicked. */
 .social-btn.is-soon { cursor: default; border-style: dashed; opacity: 0.55; }
 .social--light .social-btn.is-soon { background: transparent; }
-.social-soon { margin: 8px 0 0; font-size: var(--step--1); color: var(--muted); }
-.site-footer .social-soon { color: var(--on-dark-muted); }
 .site-footer .social { display: flex; flex-wrap: wrap; gap: 10px; }
 .site-footer a.social-btn:hover { text-decoration: none; }
 .site-footer .footer-social { margin-top: 22px; }

@@ -240,3 +240,24 @@ test.describe('landing page motion', () => {
     }
   });
 });
+
+test('robots.txt and the sitemap help search engines find the public pages only', async ({ request, baseURL }) => {
+  const robots = await request.get('/robots.txt');
+  expect(robots.status()).toBe(200);
+  const text = await robots.text();
+  for (const path of ['/admin/', '/pay/', '/api/']) expect(text).toContain(`Disallow: ${path}`);
+  expect(text).toContain(`Sitemap: ${baseURL}/sitemap.xml`);
+
+  const sitemap = await request.get('/sitemap.xml');
+  expect(sitemap.status()).toBe(200);
+  expect(sitemap.headers()['content-type']).toContain('xml');
+  const xml = await sitemap.text();
+  for (const path of ['/', '/faq/', ...destinations.map((d) => `/destinations/${d}/`), ...journeys.map((j) => `/packages/${j}/`)]) {
+    expect(xml).toContain(`<loc>${baseURL}${path}</loc>`);
+  }
+  expect(xml).not.toContain('/admin');
+  // Every address in the sitemap actually opens.
+  for (const loc of [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]!)) {
+    expect((await request.get(loc.replace(baseURL!, ''))).status(), loc).toBe(200);
+  }
+});
