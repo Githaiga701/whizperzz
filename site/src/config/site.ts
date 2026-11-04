@@ -24,7 +24,7 @@ export const site = {
   contact: {
     phones: ['+254792916616', '+254722176027'],
     whatsapp: '+254741955190',
-    email: 'whizperzpizza@gmail.com',
+    email: 'whizperzdawn@gmail.com',
     address: 'Donholm, inside Total Petrol Station, Nairobi, Kenya',
     postal: 'P.O. Box 78687-00507, Nairobi',
     greeting: 'Hello Whizperz Tours, I would like to plan a trip.',

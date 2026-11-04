@@ -34,7 +34,7 @@ describe('contact links', () => {
     expect(whatsappUrl('Hi & bye')).toBe('https://wa.me/254741955190?text=Hi%20%26%20bye');
   });
   it('builds a mailto link', () => {
-    expect(emailUrl('Trip', 'a b')).toBe('mailto:whizperzpizza@gmail.com?subject=Trip&body=a%20b');
+    expect(emailUrl('Trip', 'a b')).toBe('mailto:whizperzdawn@gmail.com?subject=Trip&body=a%20b');
   });
   it('formats phone numbers and shillings', () => {
     expect(prettyPhone('+254722176027')).toBe('+254 722 176 027');
