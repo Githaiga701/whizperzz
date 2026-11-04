@@ -3,10 +3,14 @@
  * Empty strings hide the matching contact button instead of showing a broken link.
  */
 export interface SiteContact {
-  phone: string;
+  /** Numbers to call, main one first (the call button uses the first). */
+  phones: readonly string[];
   whatsapp: string;
   email: string;
+  /** Where to find us. */
   address: string;
+  /** Postal address (P.O. Box). */
+  postal: string;
   /** Opening line for WhatsApp messages started from the site. */
   greeting: string;
 }
@@ -18,10 +22,11 @@ export const site = {
   description:
     'Small-group and private journeys through Kenya, planned by people who know the road. Safaris, coast and highlands, shaped around you.',
   contact: {
-    phone: '+254722176027',
-    whatsapp: '+254795144687',
+    phones: ['+254792916616', '+254722176027'],
+    whatsapp: '+254741955190',
     email: 'whizperzpizza@gmail.com',
     address: 'Donholm, inside Total Petrol Station, Nairobi, Kenya',
+    postal: 'P.O. Box 78687-00507, Nairobi',
     greeting: 'Hello Whizperz Tours, I would like to plan a trip.',
   } satisfies SiteContact,
   /** Languages offered by the Google Translate widget. */

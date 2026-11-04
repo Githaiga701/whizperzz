@@ -41,7 +41,7 @@ function layout(title: string, paragraphs: string[], rows: [string, string][] = 
 <h1 style="font-family:Georgia,serif;font-weight:400;font-size:26px;margin:0 0 16px">${esc(title)}</h1>
 ${paragraphs.map((p) => `<p style="margin:0 0 14px">${esc(p)}</p>`).join('')}
 ${table}${btn}
-<p style="margin:24px 0 0;font-size:13px;color:#65583f">${esc(site.name)} · ${esc(site.contact.address)}${site.contact.phone ? ` · ${esc(site.contact.phone)}` : ''}</p>
+<p style="margin:24px 0 0;font-size:13px;color:#65583f">${esc(site.name)} · ${esc(site.contact.postal || site.contact.address)}${site.contact.phones.length ? ` · ${site.contact.phones.map(esc).join(' / ')}` : ''}</p>
 </div></body></html>`;
 }
 
@@ -53,7 +53,8 @@ function plain(title: string, paragraphs: string[], rows: [string, string][] = [
     ...rows.map(([k, v]) => `${k}: ${v}`),
     ...(link ? ['', `${link.label}: ${link.href}`] : []),
     '',
-    `${site.name}, ${site.contact.address}`,
+    `${site.name}, ${site.contact.postal || site.contact.address}`,
+    ...(site.contact.phones.length ? [site.contact.phones.join(' / ')] : []),
   ].join('\n');
 }
 

@@ -19,9 +19,10 @@ const hasSocial = socialLinks().some((l) => l.url);
         <p class="lede">Share your dates, places you’ve heard about and the kind of trip you love. A real person will reply, usually within a day.</p>
         <ul class="contact-lines">
           {c.whatsapp && <li><span>WhatsApp</span><a href={`https://wa.me/${c.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">{prettyPhone(c.whatsapp)}</a></li>}
-          {c.phone && <li><span>Call</span><a href={`tel:${c.phone}`}>{prettyPhone(c.phone)}</a></li>}
+          {c.phones.length > 0 && <li><span>Call</span><span class="contact-phones">{c.phones.map((n) => <a href={`tel:${n}`}>{prettyPhone(n)}</a>)}</span></li>}
           {c.email && <li><span>Email</span><a href={`mailto:${c.email}`}>{c.email}</a></li>}
           <li><span>Visit</span><strong>{c.address}</strong></li>
+          {c.postal && <li><span>Post</span>{c.postal}</li>}
         </ul>
         {hasSocial && <h2 class="contact-follow">Follow along</h2>}
         <SocialLinks tone="light" />

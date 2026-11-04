@@ -29,9 +29,10 @@ import { prettyPhone } from '@/lib/enquiry';
       <div>
         <h2>Get in touch</h2>
         <ul>
-          {site.contact.phone && <li><a href={`tel:${site.contact.phone}`}>{prettyPhone(site.contact.phone)}</a></li>}
+          {site.contact.phones.map((n) => <li><a href={`tel:${n}`}>{prettyPhone(n)}</a></li>)}
           {site.contact.email && <li><a href={`mailto:${site.contact.email}`}>{site.contact.email}</a></li>}
           <li>{site.contact.address}</li>
+          {site.contact.postal && <li>{site.contact.postal}</li>}
           <li><a href="/how-to-book/">How to book</a> · <a href="/faq/">FAQs</a></li>
         </ul>
       </div>

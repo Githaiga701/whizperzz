@@ -69,7 +69,7 @@ export function emailUrl(subject: string, text: string): string | null {
 }
 
 export function phoneUrl(): string | null {
-  const digits = site.contact.phone.replace(/[^+\d]/g, '');
+  const digits = (site.contact.phones[0] ?? '').replace(/[^+\d]/g, '');
   return digits ? `tel:${digits}` : null;
 }
 

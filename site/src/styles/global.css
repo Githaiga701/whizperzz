@@ -972,6 +972,7 @@ body { top: 0 !important; }
 .contact-lines li { display: grid; gap: 2px; }
 .contact-lines span { font-size: var(--step--1); color: var(--muted); }
 .contact-lines a { font-weight: 600; font-size: var(--step-1); padding-block: 6px; overflow-wrap: anywhere; }
+.contact-lines .contact-phones { display: flex; flex-wrap: wrap; gap: 0 24px; font-size: inherit; color: inherit; }
 .enquiry-form { background: var(--paper); padding: clamp(22px, 3.5vw, 40px); border-radius: var(--radius); display: grid; gap: 16px; }
 .enquiry-form .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 860px) { .contact-grid { grid-template-columns: 1fr; } }

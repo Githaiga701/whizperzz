@@ -40,7 +40,7 @@ test.describe('route sketcher', () => {
     await sketch.locator('input[name="travellers"]').fill('4');
     const wa = await openedWhatsApp(page, context, sketch.getByRole('button', { name: 'Send route on WhatsApp' }));
     const text = wa.searchParams.get('text')!;
-    expect(wa.href).toContain('wa.me/254795144687');
+    expect(wa.href).toContain('wa.me/254741955190');
     expect(text).toContain('My route (8 nights): Nairobi → Diani Coast (4) → Maasai Mara (4) → Nairobi');
     expect(text).toContain('When: August');
     expect(text).toContain('Travellers: 4');

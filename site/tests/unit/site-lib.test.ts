@@ -31,7 +31,7 @@ describe('formatEnquiry', () => {
 
 describe('contact links', () => {
   it('builds a wa.me link with the business number and encoded text', () => {
-    expect(whatsappUrl('Hi & bye')).toBe('https://wa.me/254795144687?text=Hi%20%26%20bye');
+    expect(whatsappUrl('Hi & bye')).toBe('https://wa.me/254741955190?text=Hi%20%26%20bye');
   });
   it('builds a mailto link', () => {
     expect(emailUrl('Trip', 'a b')).toBe('mailto:whizperzpizza@gmail.com?subject=Trip&body=a%20b');
