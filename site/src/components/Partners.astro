@@ -1,0 +1,42 @@
+---
+/**
+ * The bodies Whizperz works in cooperation with. "full" is the list on Our story; "strip" is the short line
+ * on the home page that points there. Names only (no logos): their marks aren't ours to use.
+ */
+import { partners } from '@/config/site';
+
+interface Props {
+  variant?: 'full' | 'strip';
+}
+const { variant = 'full' } = Astro.props;
+---
+
+{
+  variant === 'full' ? (
+    <ul class="partners" data-reveal-group>
+      {partners.map((p) => (
+        <li>
+          <span class="partner-short" aria-hidden="true">{p.short}</span>
+          <strong>
+            {p.url ? (
+              <a href={p.url} target="_blank" rel="noopener noreferrer">{p.name}</a>
+            ) : (
+              p.name
+            )}
+          </strong>
+          <span class="partner-role">{p.role}</span>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <div class="partner-strip" data-reveal>
+      <p class="partner-strip-label">In cooperation with</p>
+      <ul>
+        {partners.map((p) => (
+          <li><abbr title={p.name}>{p.short === 'Counties' ? 'County governments' : p.short}</abbr></li>
+        ))}
+      </ul>
+      <a class="link" href="/about/#partners">Who we work with</a>
+    </div>
+  )
+}

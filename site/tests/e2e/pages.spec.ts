@@ -261,3 +261,20 @@ test('robots.txt and the sitemap help search engines find the public pages only'
     expect((await request.get(loc.replace(baseURL!, ''))).status(), loc).toBe(200);
   }
 });
+
+test('partners: listed on Our story, with a short line on the home page pointing there', async ({ page }) => {
+  await page.goto('/about/');
+  const list = page.locator('#partners .partners li');
+  await expect(list).toHaveCount(5);
+  for (const name of ['Ministry of Tourism & Wildlife', 'Kenya Wildlife Service', 'Kenya Association of Tour Operators', 'National Museums of Kenya', 'County governments']) {
+    await expect(page.locator('#partners')).toContainText(name);
+  }
+  await expect(page.getByRole('link', { name: 'Kenya Wildlife Service' })).toHaveAttribute('href', 'https://www.kws.go.ke/');
+
+  await page.goto('/');
+  const strip = page.locator('.partner-strip');
+  await expect(strip).toContainText('In cooperation with');
+  await expect(strip.locator('li')).toHaveCount(5);
+  await strip.getByRole('link', { name: 'Who we work with' }).click();
+  await expect(page).toHaveURL(/\/about\/#partners$/);
+});

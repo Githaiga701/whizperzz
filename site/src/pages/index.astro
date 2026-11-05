@@ -24,6 +24,7 @@ const strip = destinations.slice(0, 5);
 const headline = 'Find your way into the wild.'.split(' ');
 const quote = 'A safari should feel less like a checklist and more like being let in.'.split(' ');
 const marquee = destinations.map((d) => d.data.name);
+import Partners from '@/components/Partners.astro';
 ---
 
 <Base title={site.name} heroImage={heroImage} heroSizes="100vw">
@@ -172,6 +173,12 @@ const marquee = destinations.map((d) => d.data.name);
           ))
         }
       </div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:0" aria-label="Who we work with">
+    <div class="wrap">
+      <Partners variant="strip" />
     </div>
   </section>
 

@@ -2,6 +2,7 @@
 import Base from '@/layouts/Base.astro';
 import PageHero from '@/components/PageHero.astro';
 import Whisper from '@/components/Whisper.astro';
+import Partners from '@/components/Partners.astro';
 import { site } from '@/config/site';
 ---
 
@@ -24,6 +25,14 @@ import { site } from '@/config/site';
       <aside class="field-notes">
         <Whisper text="Ask your guide about the birds. Even the ones who say they don’t care end up with a list." from="Overheard at camp" tilt={1.5} />
       </aside>
+    </div>
+  </section>
+
+  <section class="section" id="partners" aria-labelledby="partners-title" style="padding-top:0">
+    <div class="wrap">
+      <h2 id="partners-title" style="font-size:var(--step-3)">Who we work with</h2>
+      <p class="lede" style="max-width:52ch">Whizperz continues to operate in cooperation with the bodies that look after Kenya’s tourism, wildlife and heritage.</p>
+      <Partners />
     </div>
   </section>
 

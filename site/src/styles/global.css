@@ -464,6 +464,29 @@ body { top: 0 !important; }
   .values { grid-template-columns: 1fr; gap: 18px; }
 }
 
+/* ---------- Partners ---------- */
+
+.partners {
+  list-style: none;
+  margin: 32px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 28px 24px;
+}
+.partners li { display: grid; gap: 4px; align-content: start; padding-top: 14px; border-top: 1px solid var(--line); }
+.partners .partner-short { font-size: var(--step--1); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.partners strong { font-family: var(--display); font-weight: 400; font-size: var(--step-1); line-height: 1.2; }
+.partners strong a { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.partners .partner-role { color: var(--muted); }
+
+.partner-strip { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px; padding-block: 22px; border-block: 1px solid var(--line); }
+.partner-strip-label { margin: 0; font-size: var(--step--1); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.partner-strip ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 22px; }
+.partner-strip abbr { text-decoration: none; font-family: var(--display); font-size: var(--step-1); }
+.partner-strip .link { margin-left: auto; }
+@media (max-width: 640px) { .partner-strip .link { margin-left: 0; } }
+
 /* ---------- Kenya map ---------- */
 
 .kenya-map { width: 100%; height: auto; display: block; overflow: visible; }

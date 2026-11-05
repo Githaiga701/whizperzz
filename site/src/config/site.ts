@@ -33,6 +33,15 @@ export const site = {
   translateLanguages: ['en', 'sw', 'fr', 'de', 'es', 'it', 'zh-CN', 'ar'],
 } as const;
 
+/** Bodies Whizperz works in cooperation with (shown on Our story and the home page). */
+export const partners = [
+  { short: 'MOTW', name: 'Ministry of Tourism & Wildlife', role: 'Sets Kenya’s tourism and wildlife policy.', url: 'https://www.tourism.go.ke/' },
+  { short: 'KWS', name: 'Kenya Wildlife Service', role: 'Protects Kenya’s wildlife and runs its national parks.', url: 'https://www.kws.go.ke/' },
+  { short: 'KATO', name: 'Kenya Association of Tour Operators', role: 'The association of Kenya’s tour operators.', url: 'https://katokenya.org/' },
+  { short: 'NMK', name: 'National Museums of Kenya', role: 'Keepers of Kenya’s museums, heritage sites and collections.', url: 'https://museums.or.ke/' },
+  { short: 'Counties', name: 'County governments', role: 'Who look after the reserves and places in their counties.', url: '' },
+] as const;
+
 export const nav = [
   { href: '/destinations/', label: 'Destinations' },
   { href: '/packages/', label: 'Journeys' },
