@@ -61,6 +61,8 @@ export interface Gateway {
   readNotice(notice: GatewayNotice): ReadNotice | null;
   /** Checks the keys work (Settings → Test connection). */
   ping(): Promise<void>;
+  /** True when the gateway can't tell us about payments (PayPal by email only): the team confirms them by hand. */
+  confirmedByHand?: boolean;
 }
 
 /** Converts shillings to US dollars at our rate, rounded up to the cent. */

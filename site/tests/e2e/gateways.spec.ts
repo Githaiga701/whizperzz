@@ -35,6 +35,53 @@ async function openGateway(page: Page, ref: string, form: string, button: string
   await f.getByRole('button', { name: button }).click();
 }
 
+test.describe('PayPal', () => {
+  test('guest pays in dollars on PayPal and comes back to a confirmed booking', async ({ page, request }) => {
+    const ref = await newQuote(request);
+    await openGateway(page, ref, 'paypal', 'Continue to PayPal');
+    await expect(page.locator('h1')).toHaveText('Mock PayPal checkout');
+    await expect(page.getByText('USD 653.85')).toBeVisible();
+    await page.getByRole('button', { name: 'Pay Now' }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/pay/${ref}/\\?return=paypal`));
+    await expect(page.locator('h1')).toHaveText('All paid. Thank you!', { timeout: 15_000 });
+    await expect(page.locator('[data-pay-status]')).toContainText('Receipt: CAP');
+    const q = await quoteJson(request, ref);
+    expect(q.payments[0]).toMatchObject({ provider: 'paypal', status: 'paid', charged: { amount: 653.85, currency: 'USD' } });
+  });
+
+  test('cancelling on PayPal brings the guest back to choose again', async ({ page, request }) => {
+    const ref = await newQuote(request);
+    await openGateway(page, ref, 'paypal', 'Continue to PayPal');
+    await page.getByRole('button', { name: 'Cancel and return' }).click();
+    await expect(page.locator('[data-pay-status]')).toContainText('nothing was charged');
+    await expect(page.locator('[data-pay-gateway="paypal"]')).toBeVisible();
+    expect((await quoteJson(request, ref)).status).toBe('awaiting_payment');
+  });
+
+  test('a forged "payment completed" webhook is not believed', async ({ request }) => {
+    const ref = await newQuote(request);
+    const open = await request.post('/api/pay/gateway', { data: { ref, method: 'paypal', email: 'jane@example.com' } });
+    expect(open.status()).toBe(200);
+    const invoice = (await quoteJson(request, ref)).payments[0]!.merchantRef!;
+    const raw = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.COMPLETED', resource: { id: 'FORGED', status: 'COMPLETED', invoice_id: invoice, amount: { currency_code: 'USD', value: '653.85' } } });
+    expect((await request.post('/api/callbacks/paypal/wrong-secret', { data: raw, headers: { 'content-type': 'application/json' } })).status()).toBe(404);
+    expect((await request.post('/api/callbacks/paypal/e2e-paypal-cb', { data: raw, headers: { 'content-type': 'application/json' } })).status()).toBe(200);
+    // PayPal itself says the guest never approved it.
+    const q = await quoteJson(request, ref);
+    expect(q.status).toBe('awaiting_payment');
+    expect(q.payments[0]).toMatchObject({ provider: 'paypal', status: 'pending' });
+  });
+
+  test('a guest who approves and closes the tab is still confirmed, by PayPal’s webhook', async ({ page, request }) => {
+    const ref = await newQuote(request);
+    await openGateway(page, ref, 'paypal', 'Continue to PayPal');
+    await page.route('**/pay/**', (route) => route.abort());
+    await page.getByRole('button', { name: 'Pay Now' }).click().catch(() => undefined);
+    await expect.poll(async () => (await quoteJson(request, ref)).status, { timeout: 15_000 }).toBe('paid');
+  });
+});
+
 test.describe('Paystack', () => {
   test('guest pays in shillings and comes back to a confirmed booking', async ({ page, request }) => {
     const ref = await newQuote(request);
@@ -208,6 +255,7 @@ test('online bookings can be paid with any method', async ({ request }) => {
   const travelDate = new Date(Date.now() + 40 * 86_400_000).toISOString().slice(0, 10);
   for (const [method, host] of [
     ['paystack', '/paystack/checkout'],
+    ['paypal', '/paypal/checkout'],
     ['ipos', '/ipos/pay'],
     ['unipesa', '/unipesa/hpp'],
     ['crypto', '/nowpayments/pay'],

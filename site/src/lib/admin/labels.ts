@@ -26,6 +26,7 @@ export const PROVIDER_LABEL: Record<Provider, string> = {
   unipesa: 'Unipesa',
   crypto: 'Crypto',
   paystack: 'Paystack',
+  paypal: 'PayPal',
   manual: 'Recorded by hand',
 };
 

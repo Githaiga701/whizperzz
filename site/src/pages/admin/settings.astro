@@ -64,6 +64,11 @@ if (Astro.request.method === 'POST') {
         setFlash(Astro.cookies, 'ok', 'Paystack settings saved. Paste the webhook address below into your Paystack dashboard, then use “Test connection”.');
         anchor = '#paystack';
         break;
+      case 'save_paypal':
+        rt.settings.saveSection('paypal', formObject(form, ['env', 'email', 'clientId', 'clientSecret']));
+        setFlash(Astro.cookies, 'ok', 'PayPal settings saved. With API keys, add the webhook address below in your PayPal app, then use “Test connection”.');
+        anchor = '#paypal';
+        break;
       case 'save_crypto':
         rt.settings.saveSection('crypto', formObject(form, ['env', 'apiKey', 'ipnSecret']));
         setFlash(Astro.cookies, 'ok', 'Crypto settings saved. Use “Test connection” to check them.');
@@ -72,8 +77,9 @@ if (Astro.request.method === 'POST') {
       case 'test_ipos':
       case 'test_unipesa':
       case 'test_paystack':
+      case 'test_paypal':
       case 'test_crypto': {
-        const id = action.replace('test_', '') as 'ipos' | 'unipesa' | 'paystack' | 'crypto';
+        const id = action.replace('test_', '') as 'ipos' | 'unipesa' | 'paystack' | 'paypal' | 'crypto';
         const g = getRuntime().deps.gateways[id];
         if (!g) throw new Error('Fill in and save these settings first (and the exchange rate under Online booking, for dollar payments).');
         await g.ping();
@@ -175,6 +181,15 @@ const status = [
     ok: Boolean(config.paystack),
     text: config.paystack ? `On (${config.paystack.testKey ? 'test key' : 'live key'})` : 'Off: add your Paystack secret key below',
   },
+  {
+    name: 'PayPal',
+    ok: Boolean(config.paypal),
+    text: config.paypal
+      ? `On (${config.paypal.sandbox ? 'sandbox' : 'live'}, ${config.paypal.mode === 'api' ? 'confirmed automatically' : 'email only, you confirm each payment'})`
+      : config.usdRate
+        ? 'Off: add your PayPal email or API keys below'
+        : 'Off: needs an exchange rate and your PayPal details',
+  },
   { name: 'iPOS Pay', ok: Boolean(config.ipos), text: config.ipos ? `On (${config.ipos.paymentUrl.includes('.tech') ? 'sandbox' : 'live'})` : config.usdRate ? 'Off: add your iPOSpays details below' : 'Off: needs an exchange rate and your iPOSpays details' },
   {
     name: 'Unipesa',
@@ -210,7 +225,7 @@ const status = [
   }
 
   <nav class="settings-nav" aria-label="Settings sections">
-    <a href="#general">Site</a><a href="#booking">Booking</a><a href="#mpesa">M-Pesa</a><a href="#pesapal">Pesapal</a><a href="#paystack">Paystack</a><a href="#ipos">iPOS Pay</a><a href="#unipesa">Unipesa</a><a href="#crypto">Crypto</a><a href="#email">Email</a><a href="#social">Social media</a>
+    <a href="#general">Site</a><a href="#booking">Booking</a><a href="#mpesa">M-Pesa</a><a href="#pesapal">Pesapal</a><a href="#paystack">Paystack</a><a href="#paypal">PayPal</a><a href="#ipos">iPOS Pay</a><a href="#unipesa">Unipesa</a><a href="#crypto">Crypto</a><a href="#email">Email</a><a href="#social">Social media</a>
   </nav>
 
   <div class="panel" style="margin-bottom:20px">
@@ -351,6 +366,52 @@ const status = [
           <button class="button button--small button--ghost" type="button" data-copy="#paystack-notify">Copy</button>
         </div>
       </>
+    )}
+  </section>
+
+  <section class="panel" id="paypal" aria-labelledby="paypal-h">
+    <h2 id="paypal-h">PayPal</h2>
+    <p class="hint">
+      Guests pay with their PayPal account, or with a card as a guest, on PayPal’s page. Charged in US dollars at the exchange rate under Online booking (PayPal doesn’t take Kenyan shillings).
+      There are two ways to set it up:
+    </p>
+    <ul class="hint" style="margin-top:0">
+      <li><strong>Email only:</strong> just your PayPal email. Guests are sent to PayPal with the amount filled in. PayPal doesn’t tell the site, so you get an email and confirm each payment on its booking’s page.</li>
+      <li><strong>API keys (recommended):</strong> from <a href="https://developer.paypal.com/dashboard/applications" target="_blank" rel="noopener noreferrer">developer.paypal.com → Apps &amp; Credentials</a>. Payments are confirmed automatically. Sandbox and live have different keys.</li>
+    </ul>
+    <form method="post" class="admin-form">
+      <input type="hidden" name="action" value="save_paypal" />
+      <label class="field">
+        Environment
+        <select name="env">
+          <option value="" selected={!s.paypal?.env}>Same as payments mode</option>
+          <option value="sandbox" selected={s.paypal?.env === 'sandbox'}>Sandbox</option>
+          <option value="production" selected={s.paypal?.env === 'production'}>Live</option>
+        </select>
+      </label>
+      <SettingField name="email" label="PayPal email" hint="The email your PayPal account is registered with. Enough on its own for the email-only way." value={s.paypal?.email} source={src('paypal', 'email')} envValue={envOf('paypal', 'email')} />
+      <div class="two">
+        <SettingField name="clientId" label="Client ID" hint="Optional. Add both keys for automatic confirmation." value={s.paypal?.clientId} source={src('paypal', 'clientId')} envValue={envOf('paypal', 'clientId')} />
+        <SettingField name="clientSecret" label="Secret" hint="From the same app, next to the client ID." secret source={src('paypal', 'clientSecret')} />
+      </div>
+      <div class="actions"><button class="button button--small" type="submit">Save PayPal</button></div>
+    </form>
+    {config.paypal?.mode === 'api' && (
+      <>
+        <div class="actions" style="margin-top:12px">
+          <form method="post"><input type="hidden" name="action" value="test_paypal" /><button class="button button--small button--ghost" type="submit">Test connection</button></form>
+        </div>
+        <div style="margin-top:16px">
+          <p class="hint">Webhook address. In your PayPal app (developer.paypal.com → Apps &amp; Credentials → {config.paypal.sandbox ? 'Sandbox' : 'Live'} → your app → Webhooks → Add webhook), paste this and tick <em>Checkout order approved</em>, <em>Payment capture completed</em>, <em>denied</em> and <em>pending</em>. It confirms payments even if a guest closes the page early.</p>
+          <div class="copy-row">
+            <input id="paypal-notify" readonly value={config.paypal.notifyUrl} aria-label="PayPal webhook address" />
+            <button class="button button--small button--ghost" type="button" data-copy="#paypal-notify">Copy</button>
+          </div>
+        </div>
+      </>
+    )}
+    {config.paypal?.mode === 'email' && (
+      <p class="hint" style="margin-top:12px">On, by email only. Each PayPal payment shows as <strong>In progress</strong> on its booking until you confirm it there with the PayPal transaction ID.</p>
     )}
   </section>
 

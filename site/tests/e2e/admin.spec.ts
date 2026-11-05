@@ -207,6 +207,25 @@ test('settings: Paystack is on, its test button works, and its webhook address c
   await expect(page.locator('.status-list li', { hasText: 'Paystack' })).toContainText('On (test key)');
 });
 
+test('settings: PayPal is on, its test button works, and its webhook address can be copied', async () => {
+  await page.goto('/admin/settings/');
+  await expect(page.locator('.status-list li', { hasText: 'PayPal' })).toContainText('On (sandbox, confirmed automatically)');
+  const pp = page.locator('#paypal');
+  await pp.getByRole('button', { name: 'Test connection' }).click();
+  await expect(flash()).toContainText('PayPal connection works');
+  await expect(page.locator('#paypal-notify')).toHaveValue(/\/api\/callbacks\/paypal\/e2e-paypal-cb$/);
+  await expect(pp).toContainText('Payment capture completed');
+
+  // Typos are caught with a clear message, and nothing changes.
+  await pp.getByLabel(/^PayPal email/).fill('not-an-email');
+  await pp.getByRole('button', { name: 'Save PayPal' }).click();
+  await expect(flash()).toContainText('doesn’t look like an email address');
+  await pp.getByLabel(/^Client ID/).fill('short');
+  await pp.getByRole('button', { name: 'Save PayPal' }).click();
+  await expect(flash()).toContainText('doesn’t look like a PayPal client ID');
+  await expect(page.locator('.status-list li', { hasText: 'PayPal' })).toContainText('On (sandbox');
+});
+
 test('social media links: hidden until one is saved, then live in the footer and on Contact', async () => {
   const pub = await context.newPage();
   await pub.goto('/contact/');

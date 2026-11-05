@@ -69,6 +69,7 @@ Fill in each provider in **Admin → Settings** and press its **Test connection*
 - **M-Pesa** and **crypto (NOWPayments)**: nothing extra; the site sends its address with every payment.
 - **Pesapal**: press **Register IPN** (needed whenever the site address changes).
 - **Paystack**: in Paystack's dashboard → **Settings → API Keys & Webhooks**, set the webhook URL to the one shown under Paystack in the admin.
+- **PayPal**: with API keys, add the webhook address shown under PayPal in the admin to your app at developer.paypal.com. With only your PayPal email, there's nothing to set: you confirm each PayPal payment on its booking's page.
 - Keep **Sandbox** until a real test payment of each kind has gone through. Then switch to live keys and set `PAYMENTS_MODE=production` in Setup Node.js App (and Restart).
 
 ## Updating the site later

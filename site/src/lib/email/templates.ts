@@ -18,6 +18,7 @@ function methodLabel(p: Payment): string {
   if (p.provider === 'ipos') return `${p.method ?? 'Card'} (iPOS Pay${charged})`;
   if (p.provider === 'unipesa') return `${p.method ?? 'Unipesa'}${p.method ? ' (Unipesa)' : ''}`;
   if (p.provider === 'paystack') return p.method ? `${p.method} (Paystack)` : 'Paystack';
+  if (p.provider === 'paypal') return `${p.method ?? 'PayPal'}${charged ? ` (${charged.slice(2)})` : ''}`;
   if (p.provider === 'crypto') return `Crypto${p.method ? `: ${p.method}` : ''}${charged ? ` (${charged.slice(2)})` : ''}`;
   return p.method ?? 'Recorded by our team';
 }

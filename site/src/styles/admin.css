@@ -271,3 +271,6 @@ details.action[open] > summary { margin-bottom: 8px; }
 @media (max-width: 360px) {
   .pkg-table .pkg-cell img { display: none; }
 }
+
+/* A payment the team confirms by hand (PayPal by email). */
+.confirm-by-hand { margin-top: 14px; padding: 14px; border: 1px solid #c9a227; background: #fbf4dc; border-radius: 4px; }

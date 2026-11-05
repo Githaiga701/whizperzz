@@ -2,7 +2,7 @@
 
 Everything below is done in the admin, under **Settings**. You don't need to edit any files.
 
-Guests can pay by **M-Pesa**, **Pesapal** (cards, Airtel Money and more), **iPOS Pay** (cards in US dollars), **Unipesa** (mobile money and cards in the region) and **crypto** (NOWPayments). Each method appears on the site once its keys are saved. The full account-opening guide for every provider is the "Whizperz payment setup guide" document.
+Guests can pay by **M-Pesa**, **Pesapal** (cards, Airtel Money and more), **Paystack**, **PayPal** (PayPal or card, in US dollars), **iPOS Pay** (cards in US dollars), **Unipesa** (mobile money and cards in the region) and **crypto** (NOWPayments). Each method appears on the site once its keys are saved. The full account-opening guide for every provider is the "Whizperz payment setup guide" document.
 
 ## How a payment works
 
@@ -54,6 +54,6 @@ Payment providers send results to your site, so it must be online at a public **
 - Admin logins are rate-limited (5 wrong passwords locks that login for 15 minutes). Sessions end after 12 hours or when the password changes. Forms from other websites are refused.
 
 ## Not built yet
-- Automatic refunds for iPOS Pay, Unipesa and crypto (refund in their dashboards, then record it on the quote).
+- Automatic refunds for Paystack, PayPal, iPOS Pay, Unipesa and crypto (refund in their dashboards, then record it on the quote).
 - Automatic reminders for unpaid balances (create the balance link from the quote page).
 - Automatic retries of failed refunds (retry from the quote page).

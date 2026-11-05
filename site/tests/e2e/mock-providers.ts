@@ -11,7 +11,7 @@ import { simpleParser } from 'mailparser';
 import { unipesaSign, verifyUnipesa } from '../../src/lib/payments/gateways/unipesa';
 import { nowPaymentsSignature } from '../../src/lib/payments/gateways/nowpayments';
 import { paystackSignature } from '../../src/lib/payments/gateways/paystack';
-import { E2E_IPOS, E2E_NOWPAYMENTS, E2E_PAYSTACK, E2E_UNIPESA } from './env';
+import { E2E_IPOS, E2E_NOWPAYMENTS, E2E_PAYPAL, E2E_PAYSTACK, E2E_UNIPESA } from './env';
 
 const PORT = Number(process.env['MOCK_PORT'] ?? 4398);
 const SMTP_PORT = Number(process.env['MOCK_SMTP_PORT'] ?? 4397);
@@ -438,6 +438,72 @@ const server = createServer(async (req, res) => {
       return send(res, 200, { status: true, message: 'Verification successful', data: paystackTxn(h) });
     }
     if (path === '/paystack/transaction') return send(res, 200, { status: true, message: 'Transactions retrieved', data: [] });
+
+    /* ---- PayPal (Orders v2) ---- */
+    if (path === '/paypal/v1/oauth2/token' && req.method === 'POST') {
+      for await (const _ of req) void _;
+      const ok = req.headers['authorization'] === `Basic ${Buffer.from(`${E2E_PAYPAL.clientId}:${E2E_PAYPAL.clientSecret}`).toString('base64')}`;
+      return ok ? send(res, 200, { access_token: 'e2e-pp-token', token_type: 'Bearer', expires_in: 32400 }) : send(res, 401, { error: 'invalid_client', error_description: 'Client Authentication failed' });
+    }
+    if (path.startsWith('/paypal/v2/') && req.headers['authorization'] !== 'Bearer e2e-pp-token') return send(res, 401, { name: 'AUTHENTICATION_FAILURE', message: 'Authentication failed' });
+    const ppOrder = (h: HostedPayment) => {
+      const done = h.extra['state'] === 'COMPLETED';
+      const unit = { reference_id: h.ref, invoice_id: h.ref, custom_id: h.ref, amount: { currency_code: 'USD', value: (h.amount / 100).toFixed(2) } };
+      return {
+        id: h.id.slice(3),
+        status: h.extra['state'],
+        payment_source: { paypal: { email_address: 'guest@example.com' } },
+        purchase_units: [done ? { ...unit, payments: { captures: [{ id: h.extra['capture'], status: 'COMPLETED', invoice_id: h.ref, amount: unit.amount }] } } : unit],
+        links: [{ rel: 'payer-action', href: `http://127.0.0.1:${PORT}/paypal/checkout?token=${h.id.slice(3)}` }],
+      };
+    };
+    if (path === '/paypal/v2/checkout/orders' && req.method === 'POST') {
+      const b = (await readBody(req)) as { purchase_units?: { invoice_id?: string; amount?: { currency_code?: string; value?: string } }[]; payment_source?: { paypal?: { experience_context?: { return_url?: string; cancel_url?: string } } } };
+      const u = b.purchase_units?.[0];
+      const ctx = b.payment_source?.paypal?.experience_context;
+      const requestId = String(req.headers['paypal-request-id'] ?? '');
+      const again = [...hosted.values()].find((x) => x.id.startsWith('pp:') && x.extra['requestId'] === requestId);
+      if (again) return send(res, 201, ppOrder(again));
+      if (!u?.invoice_id || u.amount?.currency_code !== 'USD' || !/^\d+\.\d{2}$/.test(u.amount.value ?? '') || !ctx?.return_url) return send(res, 422, { name: 'UNPROCESSABLE_ENTITY', message: 'Invalid order', details: [{ issue: 'INVALID_PARAMETER_VALUE' }] });
+      if ([...hosted.values()].some((x) => x.id.startsWith('pp:') && x.ref === u.invoice_id)) return send(res, 422, { name: 'UNPROCESSABLE_ENTITY', message: 'Duplicate invoice', details: [{ issue: 'DUPLICATE_INVOICE_ID' }] });
+      const id = `pp:${(9000 + ++counter).toString(36).toUpperCase()}ORDER`;
+      const h: HostedPayment = { id, ref: u.invoice_id, amount: Math.round(Number(u.amount.value) * 100), currency: 'USD', returnUrl: ctx.return_url, notifyUrl: '', status: 'pending', extra: { state: 'PAYER_ACTION_REQUIRED', cancel: ctx.cancel_url ?? ctx.return_url, requestId } };
+      hosted.set(id, h);
+      return send(res, 201, ppOrder(h));
+    }
+    if (path === '/paypal/checkout') {
+      const h = hosted.get(`pp:${url.searchParams.get('token') ?? ''}`);
+      if (!h) return send(res, 404, 'Unknown order', 'text/plain');
+      const t = encodeURIComponent(h.id.slice(3));
+      return send(res, 200, page('Mock PayPal checkout', `<p>USD ${(h.amount / 100).toFixed(2)}</p><form method="post" action="/paypal/checkout/done?token=${t}&how=pay"><button>Pay Now</button></form><form method="post" action="/paypal/checkout/done?token=${t}&how=cancel"><button>Cancel and return</button></form>`), 'text/html');
+    }
+    if (path === '/paypal/checkout/done' && req.method === 'POST') {
+      const token = url.searchParams.get('token') ?? '';
+      const h = hosted.get(`pp:${token}`);
+      if (!h) return send(res, 404, 'Unknown order', 'text/plain');
+      if (url.searchParams.get('how') === 'cancel') return redirect(res, `${h.extra['cancel']!}${h.extra['cancel']!.includes('?') ? '&' : '?'}token=${token}`);
+      h.extra['state'] = 'APPROVED';
+      const hook = process.env['MOCK_PAYPAL_WEBHOOK_URL'];
+      // Like PayPal, the webhook carries no secret of ours: the site has to ask the API.
+      if (hook) setTimeout(() => void postRaw(hook, JSON.stringify({ event_type: 'CHECKOUT.ORDER.APPROVED', resource: ppOrder(h) }), {}), 300);
+      const back = new URL(h.returnUrl);
+      back.searchParams.set('token', token);
+      back.searchParams.set('PayerID', 'E2EPAYER1');
+      return redirect(res, back.toString());
+    }
+    const ppMatch = /^\/paypal\/v2\/checkout\/orders\/([^/]+)(\/capture)?$/.exec(path);
+    if (ppMatch) {
+      const h = hosted.get(`pp:${decodeURIComponent(ppMatch[1]!)}`);
+      if (!h) return send(res, 404, { name: 'RESOURCE_NOT_FOUND', message: 'Order not found', details: [{ issue: 'INVALID_RESOURCE_ID' }] });
+      if (!ppMatch[2]) return send(res, 200, ppOrder(h));
+      if (req.method !== 'POST') return send(res, 405, { message: 'Method not allowed' });
+      for await (const _ of req) void _;
+      if (h.extra['state'] === 'COMPLETED') return send(res, 422, { name: 'UNPROCESSABLE_ENTITY', message: 'Order already captured', details: [{ issue: 'ORDER_ALREADY_CAPTURED' }] });
+      if (h.extra['state'] !== 'APPROVED') return send(res, 422, { name: 'UNPROCESSABLE_ENTITY', message: 'Order not approved', details: [{ issue: 'ORDER_NOT_APPROVED' }] });
+      h.extra['state'] = 'COMPLETED';
+      h.extra['capture'] = `CAP${(8000 + ++counter).toString(36).toUpperCase()}`;
+      return send(res, 201, ppOrder(h));
+    }
 
     /* ---- Mail the site sent (read by the tests) ---- */
     if (path === '/mails') return send(res, 200, mails);

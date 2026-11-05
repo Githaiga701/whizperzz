@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { rmSync } from 'node:fs';
-import { E2E_ADMIN_TOKEN, E2E_IPOS, E2E_PAYSTACK, E2E_NOWPAYMENTS, E2E_UNIPESA, E2E_USD_RATE, MOCK_PORT, MOCK_SMTP_PORT, SITE_PORT } from './tests/e2e/env';
+import { E2E_ADMIN_TOKEN, E2E_IPOS, E2E_PAYPAL, E2E_PAYSTACK, E2E_NOWPAYMENTS, E2E_UNIPESA, E2E_USD_RATE, MOCK_PORT, MOCK_SMTP_PORT, SITE_PORT } from './tests/e2e/env';
 
 /**
  * Browser tests run against the real built server (npm run build first; npm run test:e2e does both)
@@ -54,6 +54,10 @@ const siteEnv = {
   NOWPAYMENTS_IPN_SECRET: E2E_NOWPAYMENTS.ipnSecret,
   NOWPAYMENTS_CALLBACK_SECRET: 'e2e-crypto-cb',
   NOWPAYMENTS_BASE_URL: `${mock}/nowpayments/v1`,
+  PAYPAL_CLIENT_ID: E2E_PAYPAL.clientId,
+  PAYPAL_CLIENT_SECRET: E2E_PAYPAL.clientSecret,
+  PAYPAL_CALLBACK_SECRET: 'e2e-paypal-cb',
+  PAYPAL_BASE_URL: `${mock}/paypal`,
 };
 
 // E2E_REDIS=1 runs the same tests with saved data in (fake) Upstash Redis, the way the site runs on Vercel.
@@ -84,7 +88,7 @@ export default defineConfig({
     {
       command: 'npx tsx tests/e2e/mock-providers.ts',
       url: `${mock}/health`,
-      env: { MOCK_PORT: String(MOCK_PORT), MOCK_SMTP_PORT: String(MOCK_SMTP_PORT), MOCK_PESAPAL_IPN_URL: `${site}/api/callbacks/pesapal/e2e-pesapal-cb`, MOCK_PAYSTACK_WEBHOOK_URL: `${site}/api/callbacks/paystack/e2e-paystack-cb` },
+      env: { MOCK_PORT: String(MOCK_PORT), MOCK_SMTP_PORT: String(MOCK_SMTP_PORT), MOCK_PESAPAL_IPN_URL: `${site}/api/callbacks/pesapal/e2e-pesapal-cb`, MOCK_PAYSTACK_WEBHOOK_URL: `${site}/api/callbacks/paystack/e2e-paystack-cb`, MOCK_PAYPAL_WEBHOOK_URL: `${site}/api/callbacks/paypal/e2e-paypal-cb` },
       reuseExistingServer: false,
       stdout: 'pipe',
     },

@@ -65,6 +65,13 @@ export interface Settings {
     callbackIps?: string;
     callbackSecret?: string;
   };
+  paypal?: {
+    env?: 'sandbox' | 'production';
+    email?: string;
+    clientId?: string;
+    clientSecret?: string;
+    callbackSecret?: string;
+  };
   social?: {
     instagram?: string;
     twitter?: string;
@@ -88,10 +95,10 @@ export interface Settings {
   };
 }
 
-export type Section = 'mpesa' | 'pesapal' | 'email' | 'booking' | 'ipos' | 'unipesa' | 'crypto' | 'paystack' | 'social';
+export type Section = 'mpesa' | 'pesapal' | 'email' | 'booking' | 'ipos' | 'unipesa' | 'crypto' | 'paystack' | 'paypal' | 'social';
 
 /** Sections whose notify address contains a secret we create. */
-const CALLBACK_SECTIONS: readonly Section[] = ['mpesa', 'pesapal', 'ipos', 'unipesa', 'crypto', 'paystack'];
+const CALLBACK_SECTIONS: readonly Section[] = ['mpesa', 'pesapal', 'ipos', 'unipesa', 'crypto', 'paystack', 'paypal'];
 
 /** Fields that are never shown back in the browser. Leaving them blank on save keeps the saved value. */
 export const SECRET_FIELDS: Record<Section, readonly string[]> = {
@@ -103,6 +110,7 @@ export const SECRET_FIELDS: Record<Section, readonly string[]> = {
   unipesa: ['secretKey', 'callbackSecret'],
   crypto: ['apiKey', 'ipnSecret', 'callbackSecret'],
   paystack: ['secretKey', 'callbackSecret'],
+  paypal: ['clientSecret', 'callbackSecret'],
   social: [],
 };
 
@@ -165,6 +173,13 @@ export const ENV_MAP = {
     callbackIps: 'PAYSTACK_CALLBACK_IPS',
     callbackSecret: 'PAYSTACK_CALLBACK_SECRET',
   },
+  paypal: {
+    env: 'PAYPAL_ENV',
+    email: 'PAYPAL_EMAIL',
+    clientId: 'PAYPAL_CLIENT_ID',
+    clientSecret: 'PAYPAL_CLIENT_SECRET',
+    callbackSecret: 'PAYPAL_CALLBACK_SECRET',
+  },
   social: {
     instagram: 'SOCIAL_INSTAGRAM',
     twitter: 'SOCIAL_TWITTER',
@@ -195,7 +210,7 @@ export function settingsToEnv(s: Settings): Record<string, string> {
   };
   put(ENV_MAP.siteUrl, s.siteUrl);
   put(ENV_MAP.paymentsMode, s.paymentsMode);
-  for (const section of ['mpesa', 'pesapal', 'email', 'booking', 'ipos', 'unipesa', 'crypto', 'paystack', 'social'] as const) {
+  for (const section of ['mpesa', 'pesapal', 'email', 'booking', 'ipos', 'unipesa', 'crypto', 'paystack', 'paypal', 'social'] as const) {
     const values = (s[section] ?? {}) as Record<string, unknown>;
     for (const [field, key] of Object.entries(ENV_MAP[section])) put(key, values[field]);
   }
@@ -218,6 +233,10 @@ export function newSecret(): string {
 }
 
 function validateField(field: string, v: string, section?: Section): void {
+  if (section === 'paypal' && field === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error('That doesn’t look like an email address. Use the email your PayPal account is registered with.');
+  if (section === 'paypal' && (field === 'clientId' || field === 'clientSecret') && !/^[A-Za-z0-9_-]{20,}$/.test(v)) {
+    throw new Error(`That doesn’t look like a PayPal ${field === 'clientId' ? 'client ID' : 'secret'}. Copy it from developer.paypal.com → Apps & Credentials → your app.`);
+  }
   if (section === 'paystack' && field === 'secretKey' && !/^sk_(test|live)_[A-Za-z0-9]{10,}$/.test(v)) {
     throw new Error('That isn’t a Paystack secret key. It starts with sk_test_ (for testing) or sk_live_ (for real payments). The public key (pk_…) isn’t needed.');
   }

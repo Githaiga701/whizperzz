@@ -12,12 +12,15 @@ import {
   needsAttention,
   payUrl,
   recordManualPayment,
+  confirmPaymentByHand,
+  markPaymentNotReceived,
   refundPayment,
   refundable,
   reopenQuote,
   resolveRefundManually,
   syncPesapalRefunds,
 } from '@/lib/payments/service';
+import type { GatewayId } from '@/lib/payments/store';
 import { getPaymentDeps, getRuntime } from '@/lib/server/payments';
 import { emailPayLink, resendReceipt, whatsappShareUrl } from '@/lib/server/admin-actions';
 import { PAYMENT_STATUS_LABEL, PROVIDER_LABEL, REFUND_STATUS_LABEL, STATUS_LABEL, dateTime } from '@/lib/admin/labels';
@@ -56,6 +59,14 @@ if (Astro.request.method === 'POST') {
       case 'reopen':
         await reopenQuote(deps, ref, by);
         message = 'Quote reopened. The pay link works again.';
+        break;
+      case 'confirm_by_hand':
+        await confirmPaymentByHand(deps, ref, str(form, 'paymentId'), formObject(form, ['reference']), by);
+        message = 'Payment confirmed. The booking is now paid and the receipt is on its way.';
+        break;
+      case 'not_received':
+        await markPaymentNotReceived(deps, ref, str(form, 'paymentId'), by);
+        message = 'Marked as not received. The guest can pay again from their link.';
         break;
       case 'manual_paid':
         await recordManualPayment(deps, ref, formObject(form, ['method', 'reference', 'note']), by);
@@ -131,6 +142,8 @@ const flash = takeFlash(Astro.cookies);
 const link = quote ? payUrl(deps.config, quote.ref) : '';
 const paidPayments = quote ? quote.payments.filter((p) => p.status === 'paid' && refundable(quote, p.id) > 0) : [];
 const pendingPayment = quote?.payments.some((p) => p.status === 'pending');
+/** Pending payments only the team can confirm (PayPal by email): checked in the PayPal account, then confirmed here. */
+const toConfirm = quote ? quote.payments.filter((p) => p.status === 'pending' && deps.gateways[p.provider as GatewayId]?.confirmedByHand) : [];
 const waitingPesapalRefund = quote?.refunds?.some((r) => r.via === 'pesapal' && r.status === 'requested');
 const reversalReady = Boolean(deps.config.mpesa?.reversal);
 const history = quote ? [...(quote.history ?? [])].reverse() : [];
@@ -227,7 +240,26 @@ const PLAN_LABEL = { deposit: 'Deposit', full: 'Paid in full', balance: 'Balance
                   </table>
                 </div>
               )}
-              {pendingPayment && (
+              {toConfirm.map((p) => (
+                <div class="confirm-by-hand" data-confirm-by-hand>
+                  <p style="margin:0 0 8px">
+                    <strong>Waiting for you to confirm:</strong> {PROVIDER_LABEL[p.provider]} payment of {p.charged ? `${p.charged.currency} ${p.charged.amount.toFixed(2)}` : formatKes(p.amountKes)}, reference <span class="code">{p.merchantRef}</span>.
+                    Check your {PROVIDER_LABEL[p.provider]} account for a payment with this reference, then confirm it here.
+                  </p>
+                  <form method="post" class="admin-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end">
+                    <input type="hidden" name="action" value="confirm_by_hand" />
+                    <input type="hidden" name="paymentId" value={p.id} />
+                    <label class="field" style="flex:1 1 220px;margin:0">{PROVIDER_LABEL[p.provider]} transaction ID<input name="reference" required maxlength="80" placeholder="e.g. 8AB12345CD678901E" /></label>
+                    <button class="button button--small" type="submit">Confirm payment received</button>
+                  </form>
+                  <form method="post" style="margin-top:8px">
+                    <input type="hidden" name="action" value="not_received" />
+                    <input type="hidden" name="paymentId" value={p.id} />
+                    <button class="button button--small button--ghost" type="submit">It never arrived</button>
+                  </form>
+                </div>
+              ))}
+              {pendingPayment && toConfirm.length === 0 && (
                 <form method="post" style="margin-top:12px">
                   <input type="hidden" name="action" value="check_status" />
                   <button class="button button--small button--ghost" type="submit">Check with the provider now</button>

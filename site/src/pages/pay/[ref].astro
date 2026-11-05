@@ -72,7 +72,7 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
               <p class="form-note">We will never ask for your M-Pesa PIN or card details by phone, WhatsApp or email.</p>
             </div>
 
-            <div class="enquiry-form pay-panel" data-pay data-ref={view.ref} data-initial={view.status} data-wait={lastProvider === 'crypto' ? '20' : '3'}>
+            <div class="enquiry-form pay-panel" data-pay data-ref={view.ref} data-initial={view.status} data-wait={lastProvider === 'crypto' ? '20' : '3'} data-by-hand={view.confirmedByHand ? '1' : undefined}>
               <div class="pay-status" data-pay-status role="status" aria-live="polite" data-state={view.status}>
                 {view.status === 'paid' && (
                   <>
@@ -116,6 +116,17 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
                       </label>
                       <button class="button" type="submit">Continue to Paystack</button>
                       <p class="form-note">Visa, Mastercard, M-Pesa and Apple Pay on Paystack’s secure page (part of Stripe). Charged in Kenyan shillings.</p>
+                    </form>
+                  )}
+                  {view.methods.paypal && (
+                    <form class="pay-method" data-pay-gateway="paypal">
+                      <h2>Pay with PayPal</h2>
+                      <label class="field">
+                        Email <span class="hint">optional</span>
+                        <input name="email" type="email" autocomplete="email" />
+                      </label>
+                      <button class="button" type="submit">Continue to PayPal</button>
+                      <p class="form-note">Your PayPal account, or a card without one, on PayPal’s secure page. Charged in US dollars ({usd}).</p>
                     </form>
                   )}
                   {view.methods.ipos && (
@@ -283,7 +294,7 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
       startPolling();
     });
 
-    const names: Record<string, string> = { paystack: 'Paystack', ipos: 'iPOS Pay', unipesa: 'Unipesa', crypto: 'crypto' };
+    const names: Record<string, string> = { paystack: 'Paystack', paypal: 'PayPal', ipos: 'iPOS Pay', unipesa: 'Unipesa', crypto: 'crypto' };
     panel.querySelectorAll<HTMLFormElement>('[data-pay-gateway]').forEach((form) => {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -315,7 +326,8 @@ const planLabel = b ? (b.plan === 'deposit' ? `${b.depositPercent}% deposit` : b
       window.location.assign(data['redirectUrl']);
     });
 
-    if (panel.dataset['initial'] === 'pending') startPolling(Number(panel.dataset['wait'] ?? 3));
+    // A payment the team confirms by hand (PayPal by email) won't change in the next few minutes, so don't wait on it.
+    if (panel.dataset['initial'] === 'pending' && !panel.dataset['byHand']) startPolling(Number(panel.dataset['wait'] ?? 3));
 
     // Back from a payment provider's page: the browser may restore this page as it was left (buttons off, an old
     // status). Load it fresh so the guest sees whether the payment went through.

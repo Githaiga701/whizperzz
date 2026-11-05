@@ -60,6 +60,7 @@ export interface PayMethods {
   unipesa: boolean;
   crypto: boolean;
   paystack: boolean;
+  paypal: boolean;
 }
 
 export const METHOD_LABEL: Record<keyof PayMethods, string> = {
@@ -69,6 +70,7 @@ export const METHOD_LABEL: Record<keyof PayMethods, string> = {
   unipesa: 'Unipesa',
   crypto: 'Crypto',
   paystack: 'Paystack',
+  paypal: 'PayPal',
 };
 
 export const PROVIDER_NAME: Record<string, string> = {
@@ -78,6 +80,7 @@ export const PROVIDER_NAME: Record<string, string> = {
   unipesa: 'Unipesa',
   crypto: 'crypto (NOWPayments)',
   paystack: 'Paystack',
+  paypal: 'PayPal',
   manual: 'manual',
 };
 
@@ -94,6 +97,8 @@ export interface QuoteView {
   methods: PayMethods;
   /** The dollar amount for iPOS Pay and crypto, when an exchange rate is set. */
   usdAmount?: number;
+  /** The payment waiting is one the team confirms by hand (PayPal by email), so the page shouldn't keep checking. */
+  confirmedByHand?: boolean;
   /** Set when the guest booked a journey online (or this is the balance for one). */
   booking?: {
     packageName: string;
@@ -575,6 +580,7 @@ export function payMethods(deps: PaymentDeps, amountKes: number): PayMethods {
     unipesa: Boolean(deps.gateways.unipesa),
     crypto: Boolean(deps.gateways.crypto),
     paystack: Boolean(deps.gateways.paystack),
+    paypal: Boolean(deps.gateways.paypal),
   };
 }
 
@@ -630,6 +636,17 @@ export async function startGateway(
     addHistory(q, now, 'guest', `Opened ${gateway.label} checkout${money}.`);
   });
   deps.log('info', `${gateway.label} checkout opened`, { ref: quote.ref, merchantRef, charged });
+  if (gateway.confirmedByHand) {
+    const saved = (await deps.store.get(quote.ref))?.payments.at(-1);
+    if (saved) {
+      fireNotify(deps, {
+        type: 'flagged',
+        ref: quote.ref,
+        paymentId: saved.id,
+        flag: `${quote.guestName} is paying ${charged.currency} ${charged.amount.toFixed(2)} by ${gateway.label} (reference ${merchantRef}). When it shows in your ${gateway.label} account, confirm it on this booking’s page.`,
+      });
+    }
+  }
   return { redirectUrl: res.redirectUrl };
 }
 
@@ -734,7 +751,7 @@ async function reconcile(deps: PaymentDeps, quote: Quote): Promise<void> {
         }
       } else if (p.provider === 'pesapal' && deps.pesapal) {
         await checkPesapal(deps, quote.ref, p);
-      } else if (p.provider === 'ipos' || p.provider === 'unipesa' || p.provider === 'crypto' || p.provider === 'paystack') {
+      } else if (p.provider === 'ipos' || p.provider === 'unipesa' || p.provider === 'crypto' || p.provider === 'paystack' || p.provider === 'paypal') {
         await checkGateway(deps, quote.ref, p);
       }
     } catch (err) {
@@ -777,6 +794,14 @@ export function viewQuote(deps: PaymentDeps, quote: Quote): QuoteView {
   if (quote.status === 'refunded') return { ...base, status: 'refunded', message: 'This booking was refunded. Please contact us if you have any questions.' };
   if (quote.status === 'cancelled') return { ...base, status: 'cancelled', message: 'This quote has been cancelled. Please contact us for a new one.' };
   const last = quote.payments.at(-1);
+  if (last?.status === 'pending' && deps.gateways[last.provider as GatewayId]?.confirmedByHand) {
+    return {
+      ...base,
+      status: 'pending',
+      confirmedByHand: true,
+      message: `Thank you. Once your ${PROVIDER_NAME[last.provider]} payment reaches us we’ll confirm it here and email your receipt, usually within a few hours. If you didn’t finish paying, you can pay below.`,
+    };
+  }
   if (last?.status === 'pending') {
     return {
       ...base,
@@ -862,6 +887,37 @@ export async function recordManualPayment(
   });
   fireNotify(deps, { type: 'paid', ref: quote.ref, paymentId: payment.id });
   return saved;
+}
+
+/** Confirms a payment the gateway can't report on (PayPal by email) once the team sees it in their account. */
+export async function confirmPaymentByHand(deps: PaymentDeps, ref: unknown, paymentId: unknown, input: { reference?: unknown }, by: string): Promise<Quote> {
+  const quote = await requireQuote(deps, ref);
+  const payment = quote.payments.find((p) => p.id === paymentId);
+  if (!payment || payment.status !== 'pending') throw new PaymentError(409, 'not_pending', 'That payment isn’t waiting for confirmation any more.');
+  if (quote.status !== 'awaiting_payment') throw new PaymentError(409, 'not_payable', 'This booking isn’t waiting for payment.');
+  const reference = typeof input.reference === 'string' ? input.reference.trim().slice(0, 80) : '';
+  if (!reference) throw new PaymentError(400, 'invalid_input', 'Enter the transaction ID from your PayPal account, so the payment can be traced later.');
+  const now = deps.now();
+  const saved = await deps.store.update(quote.ref, (q) => {
+    markPaid(q, payment.id, reference, now);
+    const last = q.history?.at(-1);
+    if (last) last.by = by;
+  });
+  fireNotify(deps, { type: 'paid', ref: quote.ref, paymentId: payment.id });
+  return saved;
+}
+
+/** The guest started paying but the money never arrived: close that attempt so they can pay again. */
+export async function markPaymentNotReceived(deps: PaymentDeps, ref: unknown, paymentId: unknown, by: string): Promise<Quote> {
+  const quote = await requireQuote(deps, ref);
+  const payment = quote.payments.find((p) => p.id === paymentId);
+  if (!payment || payment.status !== 'pending') throw new PaymentError(409, 'not_pending', 'That payment isn’t waiting for confirmation any more.');
+  const now = deps.now();
+  return deps.store.update(quote.ref, (q) => {
+    markFailed(q, payment.id, 'We didn’t receive this payment. Please try again or choose another way to pay.', now);
+    const last = q.history?.at(-1);
+    if (last) last.by = by;
+  });
 }
 
 /** Money still refundable on a payment (paid amount minus refunds that are done or in progress). */
@@ -952,7 +1008,9 @@ export async function refundPayment(deps: PaymentDeps, ref: unknown, input: Refu
           ? 'your Unipesa merchant dashboard'
           : payment.provider === 'paystack'
             ? 'your Paystack dashboard (Transactions → the payment → Refund)'
-            : 'your NOWPayments dashboard';
+            : payment.provider === 'paypal'
+              ? 'your PayPal account (Activity → the payment → Issue a refund)'
+              : 'your NOWPayments dashboard';
     throw new PaymentError(
       400,
       'manual_only',

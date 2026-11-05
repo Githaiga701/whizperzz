@@ -87,6 +87,16 @@ const envSchema = z.object({
   PAYSTACK_CALLBACK_IPS: blank,
   PAYSTACK_BASE_URL: blank,
 
+  PAYPAL_ENV: z.enum(['sandbox', 'production']).optional(),
+  /** From developer.paypal.com → Apps & Credentials. With these, payments are confirmed automatically. */
+  PAYPAL_CLIENT_ID: blank,
+  PAYPAL_CLIENT_SECRET: blank,
+  /** Your PayPal account's email. On its own (no API keys), guests pay to it and the team confirms by hand. */
+  PAYPAL_EMAIL: blank,
+  PAYPAL_CALLBACK_SECRET: blank,
+  PAYPAL_BASE_URL: blank,
+  PAYPAL_CHECKOUT_URL: blank,
+
   NOWPAYMENTS_ENV: z.enum(['sandbox', 'production']).optional(),
   NOWPAYMENTS_API_KEY: blank,
   NOWPAYMENTS_IPN_SECRET: blank,
@@ -158,6 +168,21 @@ export interface PaystackConfig {
   notifyUrl: string;
 }
 
+export interface PayPalConfig {
+  /** "api": confirmed automatically through PayPal's API. "email": pay-to-email link, confirmed by hand. */
+  mode: 'api' | 'email';
+  apiUrl: string;
+  /** PayPal's page for the email-only link. */
+  checkoutUrl: string;
+  sandbox: boolean;
+  clientId: string | undefined;
+  clientSecret: string | undefined;
+  email: string | undefined;
+  brandName: string;
+  callbackSecret: string;
+  notifyUrl: string;
+}
+
 export interface NowPaymentsConfig {
   baseUrl: string;
   apiKey: string;
@@ -179,6 +204,7 @@ export interface PaymentConfig {
   unipesa: UnipesaConfig | undefined;
   crypto: NowPaymentsConfig | undefined;
   paystack: PaystackConfig | undefined;
+  paypal: PayPalConfig | undefined;
   /** Human-readable reasons a provider is switched off. Logged once at start-up. */
   warnings: string[];
 }
@@ -200,6 +226,11 @@ export const PAYSTACK_API_URL = 'https://api.paystack.co';
 
 /** Payment options Paystack's page can show for Kenyan businesses. */
 export const PAYSTACK_CHANNELS = ['card', 'mobile_money', 'bank_transfer', 'apple_pay'] as const;
+
+export const PAYPAL_URLS = {
+  sandbox: { api: 'https://api-m.sandbox.paypal.com', checkout: 'https://www.sandbox.paypal.com/cgi-bin/webscr' },
+  production: { api: 'https://api-m.paypal.com', checkout: 'https://www.paypal.com/cgi-bin/webscr' },
+} as const;
 
 export const NOWPAYMENTS_URLS = {
   sandbox: 'https://api-sandbox.nowpayments.io/v1',
@@ -392,6 +423,34 @@ export function loadPaymentConfig(raw: Record<string, string | undefined>): Paym
     warnings.push(`Paystack is off. Missing: ${paystackMissing.join(', ')}.`);
   }
 
+  let paypal: PayPalConfig | undefined;
+  const paypalApi = Boolean(env.PAYPAL_CLIENT_ID && env.PAYPAL_CLIENT_SECRET);
+  const paypalMissing = [
+    ...(paypalApi || env.PAYPAL_EMAIL ? [] : ['PAYPAL_EMAIL (or PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET)']),
+    ...missing([
+      ['PAYPAL_CALLBACK_SECRET', env.PAYPAL_CALLBACK_SECRET],
+      ['USD_KES_RATE', usdRate ? 'ok' : undefined],
+    ]),
+  ];
+  if (paypalMissing.length === 0) {
+    const urls = PAYPAL_URLS[env.PAYPAL_ENV ?? mode];
+    if (env.PAYPAL_CLIENT_ID && !env.PAYPAL_CLIENT_SECRET) warnings.push('PayPal has a client ID but no secret, so it uses the email-only way (confirmed by hand).');
+    paypal = {
+      mode: paypalApi ? 'api' : 'email',
+      apiUrl: (env.PAYPAL_BASE_URL ?? urls.api).replace(/\/+$/, ''),
+      checkoutUrl: env.PAYPAL_CHECKOUT_URL ?? urls.checkout,
+      sandbox: (env.PAYPAL_ENV ?? mode) === 'sandbox',
+      clientId: env.PAYPAL_CLIENT_ID,
+      clientSecret: env.PAYPAL_CLIENT_SECRET,
+      email: env.PAYPAL_EMAIL,
+      brandName: 'Whizperz Tours & Safaris',
+      callbackSecret: env.PAYPAL_CALLBACK_SECRET!,
+      notifyUrl: callback('paypal', env.PAYPAL_CALLBACK_SECRET!),
+    };
+  } else if (env.PAYPAL_CLIENT_ID || env.PAYPAL_CLIENT_SECRET || env.PAYPAL_EMAIL) {
+    warnings.push(`PayPal is off. Missing: ${paypalMissing.join(', ')}.`);
+  }
+
   return {
     mode,
     siteUrl,
@@ -404,6 +463,7 @@ export function loadPaymentConfig(raw: Record<string, string | undefined>): Paym
     unipesa,
     crypto,
     paystack,
+    paypal,
     warnings,
   };
 }
