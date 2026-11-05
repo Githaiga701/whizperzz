@@ -56,7 +56,10 @@ const flash = takeFlash(Astro.cookies);
           {all.length === 0 ? (
             <>No quotes yet. <a class="link" href="/admin/quotes/new/">Create your first quote</a> and send the pay link to your guest.</>
           ) : (
-            'No quotes match. Try another search or filter.'
+            <span data-no-results>
+              {q ? <>No quotes match “{q}”{status !== 'all' && ' with this filter'}.</> : 'No quotes match this filter.'} Check the spelling, or search by reference, name, phone or receipt.{' '}
+              <a class="link" href="/admin/">Clear search</a>
+            </span>
           )}
         </p>
       ) : (

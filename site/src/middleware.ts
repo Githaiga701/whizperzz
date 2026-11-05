@@ -75,7 +75,11 @@ async function guard(ctx: APIContext, next: MiddlewareNext): Promise<Response> {
 
   if (adminPage && !ctx.locals.admin && !OPEN_ADMIN_PAGES.some((p) => path.startsWith(p))) {
     if (!rt.users.hasUsers()) return ctx.redirect('/admin/setup/');
-    return ctx.redirect(`/admin/login/?next=${encodeURIComponent(path)}`);
+    // Someone sending an admin form, or holding a login that no longer works, was logged in a moment ago:
+    // tell them their session expired (and let the page put back what they'd typed) instead of a bare login page.
+    if (path.startsWith('/admin/logout')) return ctx.redirect('/admin/login/');
+    const expired = ctx.request.method === 'POST' || Boolean(ctx.cookies.get(SESSION_COOKIE)?.value);
+    return ctx.redirect(`/admin/login/?next=${encodeURIComponent(path)}${expired ? '&expired=1' : ''}`);
   }
 
   const res = await next();

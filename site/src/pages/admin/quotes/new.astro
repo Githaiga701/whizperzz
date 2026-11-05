@@ -55,10 +55,10 @@ if (Astro.request.method === 'POST') {
   </div>
 
   <div class="panel-grid">
-    <form method="post" class="panel admin-form">
+    <form method="post" class="panel admin-form" data-validate>
       <div class="two">
-        <label class="field">Guest name<input name="guestName" value={values['guestName']} required maxlength="80" autocomplete="off" /></label>
-        <label class="field">Amount (KES)<input name="amountKes" value={values['amountKes']} required inputmode="numeric" placeholder="85000" pattern="[0-9, ]+" /></label>
+        <label class="field">Guest name<input name="guestName" value={values['guestName']} required maxlength="80" autocomplete="off" data-error-required="Enter the guest’s name." /></label>
+        <label class="field">Amount (KES)<input name="amountKes" value={values['amountKes']} required inputmode="numeric" placeholder="85000" pattern="[0-9, ]+" data-error-required="Enter the amount in shillings." data-error-pattern="Use numbers only, like 85000." /></label>
       </div>
       <div class="two">
         <label class="field">Guest email <span class="hint">Optional. Needed for emailed links and receipts.</span><input name="email" type="email" value={values['email']} autocomplete="off" /></label>
@@ -73,14 +73,14 @@ if (Astro.request.method === 'POST') {
       </label>
       <label class="field">
         Trip description <span class="hint">What the guest sees on the pay page, e.g. “Wild to blue, 2 adults, 12 to 18 January”.</span>
-        <input name="description" value={values['description']} required maxlength="200" data-description />
+        <input name="description" value={values['description']} required maxlength="200" data-description data-error-required="Describe the trip, or choose a journey above to fill this in." />
       </label>
       <label style="display:flex;gap:10px;align-items:center;font-weight:500">
         <input type="checkbox" name="sendEmail" checked={sendEmail} disabled={!rt.mailer} />
         Email the pay link to the guest now
       </label>
       {!rt.mailer && <p class="hint" style="margin:0">To email links and receipts, set up email in <a href="/admin/settings/#email">Settings</a>.</p>}
-      <button class="button" type="submit">Create quote</button>
+      <button class="button" type="submit" data-pending="Creating quote…">Create quote</button>
     </form>
 
     <div class="panel">

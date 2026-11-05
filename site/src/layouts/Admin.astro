@@ -7,6 +7,7 @@ import '@fontsource/hanken-grotesk/700.css';
 import '@/styles/global.css';
 import '@/styles/admin.css';
 import Logo from '@/components/Logo.astro';
+import NetworkBanner from '@/components/NetworkBanner.astro';
 import type { Flash } from '@/lib/admin/web';
 
 interface Props {
@@ -75,8 +76,12 @@ const nav = [
       {flash && <div class:list={['flash', `flash--${flash.kind}`]} role={flash.kind === 'error' ? 'alert' : 'status'}>{flash.text}</div>}
       <slot />
     </main>
+    <NetworkBanner note="Nothing you type here is lost." />
     <script>
       import { trackSubmitter } from '@/lib/client/forms';
+      import { isOnline } from '@/lib/client/network';
+      import { attachValidation } from '@/lib/client/validate';
+      import { applyDraft, readDraft, saveDraft, clearDraft } from '@/lib/client/drafts';
 
       // On a phone the menu is one row that scrolls sideways: bring the current page's tab into view.
       const current = document.querySelector<HTMLElement>('.admin-nav [aria-current="page"]');
@@ -105,6 +110,10 @@ const nav = [
           reset = window.setTimeout(() => (btn.textContent = label), 1600);
         });
       });
+      // Inline errors on forms marked data-validate. Added before the confirm question below, so a form with
+      // mistakes is fixed first and only then asks "Are you sure?".
+      document.querySelectorAll<HTMLFormElement>('form[data-validate]').forEach((f) => attachValidation(f));
+
       // Buttons that need a second click: <button data-confirm="Cancel this quote?">
       // Works out the pressed button itself, because older Safari doesn't say which one it was and the question
       // was being skipped there.
@@ -117,6 +126,79 @@ const nav = [
           if (question && !window.confirm(question)) e.preventDefault();
         });
       });
+
+      /* ---------- Every admin form: saving state, offline hold, and a draft that survives an expired login ---------- */
+
+      const adminForms = [...document.querySelectorAll<HTMLFormElement>('main form[method="post" i]')];
+      const formStatus = (form: HTMLFormElement): HTMLElement => {
+        let el = form.querySelector<HTMLElement>(':scope > [data-form-status]');
+        if (!el) {
+          el = document.createElement('p');
+          el.className = 'form-status';
+          el.dataset['formStatus'] = '';
+          el.setAttribute('role', 'status');
+          form.append(el);
+        }
+        return el;
+      };
+
+      // Runs after each form's own submit handlers (validation, "Are you sure?"), so it only acts on real sends.
+      document.addEventListener('submit', (e) => {
+        const form = e.target as HTMLFormElement;
+        if (e.defaultPrevented || !adminForms.includes(form)) return;
+        // Kept in this tab only, without passwords, keys or files, in case the login has run out.
+        saveDraft(location.pathname, adminForms);
+        if (navigator.onLine === false || !isOnline()) {
+          e.preventDefault();
+          const status = formStatus(form);
+          status.dataset['tone'] = 'error';
+          status.textContent = 'You’re offline. Nothing was saved, and your changes are still here. Press the button again once you’re connected.';
+          return;
+        }
+        const btn = (e as SubmitEvent).submitter as HTMLButtonElement | null;
+        // Switched off a moment later: switching off the pressed button now would drop its value from the form.
+        window.setTimeout(() => {
+          form.setAttribute('aria-busy', 'true');
+          form.querySelectorAll<HTMLButtonElement>('button[type="submit"], button:not([type])').forEach((b) => {
+            b.dataset['label'] ??= b.textContent ?? '';
+            b.disabled = true;
+          });
+          if (btn) btn.textContent = btn.dataset['pending'] ?? 'Saving…';
+        });
+      });
+
+      // Back to this page with the browser's Back button: buttons come back on.
+      window.addEventListener('pageshow', (e) => {
+        if (!e.persisted) return;
+        adminForms.forEach((f) => {
+          f.removeAttribute('aria-busy');
+          f.querySelectorAll<HTMLButtonElement>('button[data-label]').forEach((b) => {
+            b.disabled = false;
+            b.textContent = b.dataset['label'] ?? b.textContent;
+          });
+        });
+      });
+
+      // Logged back in after the session ran out: put back what was being typed, once.
+      const url = new URL(location.href);
+      if (url.searchParams.get('restore') === '1') {
+        const draft = readDraft(location.pathname);
+        const restored = draft ? applyDraft(draft, adminForms) : 0;
+        clearDraft(location.pathname);
+        url.searchParams.delete('restore');
+        history.replaceState(null, '', url.pathname + url.search + url.hash);
+        if (restored > 0) {
+          const note = document.createElement('div');
+          note.className = 'flash flash--ok';
+          note.setAttribute('role', 'status');
+          note.dataset['draftRestored'] = '';
+          note.textContent = 'You’re logged in again. We put back what you’d typed: check it, then save.';
+          document.querySelector('main')?.prepend(note);
+        }
+      } else {
+        // Back on this page normally (e.g. after saving): an old draft must never come back later.
+        clearDraft(location.pathname);
+      }
     </script>
   </body>
 </html>

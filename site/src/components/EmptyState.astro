@@ -1,0 +1,29 @@
+---
+/**
+ * A list or page with nothing in it yet: say why, and offer the next step. Not an error.
+ * Actions go in the default slot (usually one or two buttons).
+ */
+interface Props {
+  title: string;
+  text: string;
+  /** Heading level, so the page outline stays right. */
+  as?: 'h2' | 'h3';
+  /** Small line icon above the heading. */
+  icon?: 'compass' | 'search';
+  class?: string;
+}
+const { title, text, as: Heading = 'h2', icon = 'compass', class: className } = Astro.props;
+---
+
+<div class:list={['empty-state', className]} data-empty-state>
+  {
+    icon === 'compass' ? (
+      <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9.5" /><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z" /></svg>
+    ) : (
+      <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+    )
+  }
+  <Heading>{title}</Heading>
+  <p>{text}</p>
+  {Astro.slots.has('default') && <div class="button-row"><slot /></div>}
+</div>

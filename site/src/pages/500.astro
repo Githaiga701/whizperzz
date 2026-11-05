@@ -1,0 +1,32 @@
+---
+import Base from '@/layouts/Base.astro';
+import { whatsappUrl } from '@/lib/enquiry';
+
+/**
+ * Shown when something unexpected breaks on the server. Astro passes the error in `Astro.props.error`; it's logged
+ * by the server and never shown here, so no internal details reach the visitor.
+ */
+export const prerender = false;
+Astro.response.status = 500;
+const help = whatsappUrl(`Hello Whizperz, a page on your website didn’t load for me: ${Astro.url.pathname}`);
+---
+
+<Base title="We couldn’t load this page" noindex>
+  <section class="section">
+    <div class="wrap detail">
+      <div>
+        <h1>That didn’t load.</h1>
+        <p class="lede">Something went wrong on our side while loading this page. It’s usually brief, so please try again in a moment. If you were paying, open your payment link again before paying a second time: it shows what we’ve received.</p>
+        <div class="button-row">
+          <button class="button" type="button" data-reload>Try again</button>
+          <a class="button button--ghost" href="/">Go to the home page</a>
+        </div>
+        {help && <p class="form-note">Still not working? <a class="link" href={help} target="_blank" rel="noopener noreferrer">Tell us on WhatsApp</a> and we’ll help.</p>}
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script>
+  document.querySelector('[data-reload]')?.addEventListener('click', () => window.location.reload());
+</script>

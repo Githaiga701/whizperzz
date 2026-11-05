@@ -68,5 +68,6 @@ npm run test:all     # type-check + unit/API tests (Vitest) + browser tests (Pla
 - Booking and pricing logic is in `src/lib/packages/`. Prices are always recalculated on the server (`/api/book`).
 - Landing-page motion is in `src/scripts/motion.ts` and the "Motion" section of `global.css`. It switches itself off for anyone whose device asks for reduced motion.
 - Payment logic is in `src/lib/payments/` (no web code, fully unit-tested). Admin pages are in `src/pages/admin/`.
+- Empty, loading, error, offline, slow, no-results, session-expired, validation and success states are mapped in [UI_STATES.md](UI_STATES.md). Browser requests go through `src/lib/client/network.ts`; forms get inline errors from `src/lib/client/validate.ts`.
 - Browser tests run the real built server against fake M-Pesa, Pesapal and mail servers (`tests/e2e/mock-providers.ts`).
 - `npm run quote`, `/api/admin/quotes` and `/api/admin/packages` (with `ADMIN_TOKEN`) are there for scripts. The admin does the same in the browser.
