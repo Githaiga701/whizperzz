@@ -40,7 +40,7 @@ const usdMax = open && rate ? Math.floor((open.maxKes / rate) * 100) / 100 : und
                 <div><dt>Up to</dt><dd>{formatKes(open.maxKes)}</dd></div>
                 {rate && <div class="full"><dt>Paying in dollars</dt><dd>Converted at KES {rate} per US dollar.</dd></div>}
               </dl>
-              <p class="form-note">If you’ve booked with us, put your booking reference in “What it’s for” so we can match it. We will never ask for your M-Pesa PIN or card details by phone, WhatsApp or email.</p>
+              <p class="form-note">If you’ve booked with us, put your booking reference in “What it’s for” so we can match it. We will never ask for your M-Pesa PIN or card details by phone, WhatsApp or email. By paying you agree to our <a class="link" href="/terms/">terms</a> and <a class="link" href="/refund-policy/">refund &amp; cancellation policy</a>.</p>
             </div>
 
             <form class="enquiry-form" data-open-pay data-min-kes={open.minKes} data-max-kes={open.maxKes} data-rate={rate}>

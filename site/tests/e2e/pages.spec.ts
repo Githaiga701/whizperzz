@@ -18,6 +18,8 @@ const pages = [
   '/how-to-book/',
   '/contact/',
   '/privacy/',
+  '/terms/',
+  '/refund-policy/',
 ];
 
 test.describe('every page', () => {
