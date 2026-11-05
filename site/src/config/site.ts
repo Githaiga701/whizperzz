@@ -17,6 +17,8 @@ export interface SiteContact {
 
 export const site = {
   name: 'Whizperz Tours & Safaris',
+  /** The registered company; the site trades under `name`. Shown in the footer copyright and the privacy policy. */
+  legalName: 'Whizperz Dawn Tours',
   shortName: 'Whizperz',
   motto: 'Good journeys leave a little wild in you.',
   description:
