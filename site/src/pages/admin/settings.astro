@@ -40,7 +40,7 @@ if (Astro.request.method === 'POST') {
         anchor = '#email';
         break;
       case 'save_booking':
-        rt.settings.saveSection('booking', formObject(form, ['depositPercent', 'leadDays', 'usdRate']));
+        rt.settings.saveSection('booking', formObject(form, ['depositPercent', 'leadDays', 'usdRate', 'openPay', 'openMinKes', 'openMaxKes']));
         setFlash(Astro.cookies, 'ok', 'Booking rules saved. Journey pages use them straight away.');
         anchor = '#booking';
         break;
@@ -270,6 +270,22 @@ const status = [
         <SettingField name="leadDays" label="Book at least this many days ahead" type="number" hint={`Closer trips need a message first. Now: ${booking.leadDays} day${booking.leadDays === 1 ? '' : 's'}.`} placeholder="3" value={s.booking?.leadDays} source={src('booking', 'leadDays')} envValue={envOf('booking', 'leadDays')} />
       </div>
       <SettingField name="usdRate" label="Exchange rate (KES per US dollar)" hint="iPOS Pay and crypto charge in US dollars. Prices are converted at this rate, rounded up to the cent. Update it when the rate moves." placeholder="129.50" value={s.booking?.usdRate} source={src('booking', 'usdRate')} envValue={envOf('booking', 'usdRate')} />
+      <label class="field">
+        Make a payment page
+        <select name="openPay">
+          <option value="" selected={!s.booking?.openPay}>{envOf('booking', 'openPay') ? `From environment (${envOf('booking', 'openPay')})` : 'Off (default)'}</option>
+          <option value="on" selected={s.booking?.openPay === 'on'}>On: guests can pay any amount at /pay/</option>
+          <option value="off" selected={s.booking?.openPay === 'off'}>Off</option>
+        </select>
+        <span class="hint">
+          For deposits, balances, custom trips and tips. The guest types the amount (in shillings, or dollars at the rate above), gets a booking reference, then pays with any method that’s on. Each one shows in <a href="/admin/">Quotes</a> like any other booking.
+          {booking.openPay ? <> Now: <a href="/pay/" target="_blank" rel="noopener">on</a>, {booking.openPay.minKes.toLocaleString('en-KE')} to {booking.openPay.maxKes.toLocaleString('en-KE')} KES.</> : ' Now: off.'}
+        </span>
+      </label>
+      <div class="two">
+        <SettingField name="openMinKes" label="Lowest amount (KES)" type="number" hint="Guests can’t pay less than this on the Make a payment page." placeholder="500" value={s.booking?.openMinKes} source={src('booking', 'openMinKes')} envValue={envOf('booking', 'openMinKes')} />
+        <SettingField name="openMaxKes" label="Highest amount (KES)" type="number" hint="Larger payments need a link from you. M-Pesa still stops at its own limit." placeholder="2000000" value={s.booking?.openMaxKes} source={src('booking', 'openMaxKes')} envValue={envOf('booking', 'openMaxKes')} />
+      </div>
       <button class="button button--small" type="submit">Save booking rules</button>
     </form>
   </section>

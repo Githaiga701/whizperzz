@@ -34,6 +34,10 @@ export interface Settings {
     depositPercent?: string;
     leadDays?: string;
     usdRate?: string;
+    /** "on" shows the public Make a payment page, where guests type the amount. */
+    openPay?: string;
+    openMinKes?: string;
+    openMaxKes?: string;
   };
   ipos?: {
     env?: 'sandbox' | 'production';
@@ -142,6 +146,9 @@ export const ENV_MAP = {
     depositPercent: 'DEPOSIT_PERCENT',
     leadDays: 'BOOKING_LEAD_DAYS',
     usdRate: 'USD_KES_RATE',
+    openPay: 'OPEN_PAY',
+    openMinKes: 'OPEN_PAY_MIN_KES',
+    openMaxKes: 'OPEN_PAY_MAX_KES',
   },
   ipos: {
     env: 'IPOS_ENV',
@@ -250,6 +257,8 @@ function validateField(field: string, v: string, section?: Section): void {
   if (field === 'notifyTo' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error('The alerts address doesn’t look like an email address.');
   if (field === 'depositPercent' && !(/^\d{1,3}$/.test(v) && Number(v) <= 100)) throw new Error('The deposit is a percentage from 0 to 100.');
   if (field === 'leadDays' && !(/^\d{1,3}$/.test(v) && Number(v) <= 365)) throw new Error('Days ahead must be a number from 0 to 365.');
+  if (field === 'openPay' && v !== 'on' && v !== 'off') throw new Error('Make a payment page must be On or Off.');
+  if ((field === 'openMinKes' || field === 'openMaxKes') && !(/^\d{1,9}$/.test(v) && Number(v) >= 1)) throw new Error('Payment limits are whole shillings, like 1000.');
   if (field === 'usdRate' && !(/^\d{1,4}(\.\d{1,4})?$/.test(v) && Number(v) >= 1)) throw new Error('The exchange rate is shillings per US dollar, like 129.50.');
   if (field === 'tpn' && !/^[A-Za-z0-9]{6,20}$/.test(v)) throw new Error('The TPN is the 10 to 12 digit terminal number from iPOSpays.');
   if (field === 'providerId' && !/^\d{1,6}$/.test(v)) throw new Error('The Unipesa provider ID is a number, like 12.');

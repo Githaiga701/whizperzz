@@ -17,7 +17,16 @@ The deposit share (30% to start with) and how many days ahead guests must book (
 3. The guest pays with **M-Pesa** (a prompt on their phone) or **card** (Pesapal's secure page).
 4. Safaricom or Pesapal tells the site. The site **double-checks with them directly** and checks the amount, then marks the quote **Paid**, emails the guest a receipt and emails you an alert.
 
-The browser never decides the amount. It only sends the booking reference.
+**Any amount, chosen by the guest (Make a payment page).** For deposits, balances, custom trips and tips without waiting for a link. Switch it on in **Settings → Online booking → Make a payment page** and set the lowest and highest amounts (KES 500 to 2,000,000 to start with). Then share **yoursite/pay/**.
+
+1. The guest types the amount in shillings, or in dollars (converted at the exchange rate, rounded up to the shilling), plus their name, email and what it's for.
+2. The site checks the amount is within your limits and saves it as a quote, just like one you'd make yourself.
+3. The guest lands on that quote's pay page and chooses any method that's on: M-Pesa, card, Paystack, PayPal, crypto and so on. Crypto is charged in dollars, so a guest who typed USD 150 is asked for exactly USD 150.
+4. It shows under **Quotes** like any other booking, marked as created by the guest.
+
+Each address can start 5 of these every 10 minutes, and the page stays hidden (and refuses requests) while it's off or while no way to pay is set up.
+
+Apart from that one step, the browser never decides the amount. It only sends the booking reference.
 
 ## Test with the sandboxes first
 
