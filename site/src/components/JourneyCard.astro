@@ -26,6 +26,7 @@ const price = pkg.pricing.adultKes;
   <div class="journey-card-photo">
     <img {...responsive(pkg.photo.src, '(max-width: 640px) 100vw, (max-width: 1080px) 50vw, 400px', 1280)} alt={pkg.photo.alt} loading="lazy" decoding="async" width="900" height="675" />
   </div>
+  <i class="ticket-seam" aria-hidden="true"></i>
   <span class="days-badge">{pkg.days} days</span>
   <div class="journey-card-body">
     <p class="journey-card-route">{places}</p>

@@ -6,10 +6,20 @@ interface Props {
   crumbs?: { href: string; label: string }[] | undefined;
 }
 import { responsive } from '@/lib/images';
+import Horizon from './Horizon.astro';
 const { title, intro, image, crumbs } = Astro.props;
+// Dust in the light over the photo: [left %, top %, size px, seconds, delay s]
+const motes = [[10, 75, 3, 15, 0], [24, 50, 2, 19, 4], [37, 85, 3, 17, 8], [52, 60, 2, 21, 2], [66, 80, 3, 16, 10], [79, 45, 2, 20, 6], [90, 70, 3, 18, 12]];
 ---
 
-<section class:list={['page-hero', !image && 'page-hero--plain']}>
+<section class:list={['page-hero', !image && 'page-hero--plain']} data-terrain={image ? undefined : ''}>
+  {
+    image && (
+      <div class="motes" aria-hidden="true">
+        {motes.map(([x, y, size, t, d]) => <i style={`--x:${x}%;--y:${y}%;--s:${size}px;--t:${t}s;--d:-${d}s`} />)}
+      </div>
+    )
+  }
   {image && <img {...responsive(image.src, '100vw')} alt={image.alt} fetchpriority="high" decoding="async" width="1800" height="1000" />}
   <div class="wrap">
     {
@@ -28,4 +38,12 @@ const { title, intro, image, crumbs } = Astro.props;
     {intro && <p>{intro}</p>}
     <slot />
   </div>
+  {
+    !image && (
+      <>
+        <p class="map-note" aria-hidden="true">Nairobi · 1°17′ S, 36°49′ E · 1,795 m</p>
+        <Horizon tone="paper" class="page-hero-horizon" />
+      </>
+    )
+  }
 </section>

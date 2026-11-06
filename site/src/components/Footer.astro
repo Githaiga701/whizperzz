@@ -1,11 +1,14 @@
 ---
 import Logo from './Logo.astro';
+import Horizon from './Horizon.astro';
 import SocialLinks from './SocialLinks.astro';
 import { site } from '@/config/site';
 import { prettyPhone } from '@/lib/enquiry';
 ---
 
 <footer class="site-footer">
+  <div class="night-sky" aria-hidden="true"><i class="moon"></i><i class="shooting-star"></i></div>
+  <Horizon tone="night" class="footer-horizon" />
   <div class="wrap">
     <div class="footer-top">
       <div>

@@ -1,0 +1,74 @@
+---
+/**
+ * The animals, trees and the safari car drawn once and reused (<use href="#wild-giraffe" />) by the horizon,
+ * the migration band and the road under the header. Hidden from screen readers: they are scenery.
+ * Everything faces right, stands on y = its viewBox height, and fills with currentColor.
+ */
+---
+
+<svg class="wild-symbols" width="0" height="0" aria-hidden="true" focusable="false">
+  <!-- Umbrella thorn acacia: a flat, layered crown on a forked trunk -->
+  <symbol id="wild-acacia" viewBox="0 0 140 90">
+    <path d="M66 90 L67.5 52 L52 38 L55 36 L68 47 L70 30 L73 30 L72.5 46 L88 34 L90 37 L73.5 52 L74.5 90 Z" />
+    <path d="M10 32 C14 22 34 17 52 18 C58 10 80 9 92 15 C108 13 128 19 132 28 C134 34 124 37 112 36 C100 40 82 38 72 39 C58 41 40 40 30 37 C16 38 6 37 10 32 Z" />
+    <path d="M30 20 C38 12 54 10 62 13 C70 6 86 6 96 12 C88 15 74 15 66 17 C56 19 40 21 30 20 Z" />
+  </symbol>
+
+  <!-- A whistling thorn bush, low and round -->
+  <symbol id="wild-bush" viewBox="0 0 60 26">
+    <path d="M2 26 C2 16 10 10 18 12 C22 4 36 2 42 9 C50 7 58 14 58 26 Z" />
+  </symbol>
+
+  <!-- Termite mound -->
+  <symbol id="wild-mound" viewBox="0 0 30 40">
+    <path d="M2 40 C6 34 8 22 11 14 C12 8 14 2 16 2 C18 2 19 10 20 16 C22 24 26 34 28 40 Z" />
+  </symbol>
+
+  <!-- Giraffe: long neck forward, two ossicones, tail with a tuft -->
+  <symbol id="wild-giraffe" viewBox="0 0 64 100">
+    <path d="M8 54 C8 49 14 46 24 45 L40 42 C44 42 46.4 45 46.4 50 C46.4 58 42.4 64 35 65.4 L16 65.6 C10.6 65.4 8 60.6 8 54 Z" />
+    <path d="M36.6 47.6 L45.6 48.4 L54.8 17.4 L49 14.4 Z" />
+    <path d="M48 15.4 C47.8 11.4 50.8 9 54.2 9.6 L61 12.4 C63.2 13.4 63.2 16 61 16.6 L55.2 17.8 C51.8 18.4 48.2 18.4 48 15.4 Z" />
+    <path d="M50.4 10.4 L50.2 4.6 L52 4.6 L52.2 10 Z M53.6 10.4 L53.8 5 L55.6 5 L55.2 10.8 Z M56 11 L58.8 8.2 L59.6 9.4 L57.4 12 Z" />
+    <path d="M36.8 60 L39.8 60 L40.6 99.4 L37.8 99.4 Z M41.6 58 L44.6 57 L45 99.4 L42.2 99.4 Z M11.6 60 L14.6 61 L14.2 99.4 L11.4 99.4 Z M16.4 62 L19.4 62 L19.6 99.4 L16.8 99.4 Z" />
+    <path d="M9 52 C6.2 60 5 68 4.8 74 L3.4 79.4 L6.6 79 L6.8 74 C7.2 68 8.2 60 10.6 54 Z" />
+  </symbol>
+
+  <!-- Wildebeest: heavy shoulders, sloping back, head low with a beard -->
+  <symbol id="wild-gnu" viewBox="0 0 64 44">
+    <path d="M8 21 C8 16 12 13.4 18 13 L36 10 C42 8 48.4 9 50.4 13.4 C52.4 18.4 50.4 26 46 29.2 L14 30 C10 29.6 8 26.4 8 21 Z" />
+    <path d="M43.6 11 C48 9.6 52 11.4 54.4 14.6 L61.4 25.6 C62.8 28 62 30 59.6 30 L56.6 29.8 C55.2 29.6 54.2 28.8 53.6 27.6 L46.6 20.6 Z" />
+    <path d="M46.6 19.6 L48.6 28 L52.2 26.8 L50.2 19 Z" />
+    <path d="M52.6 14 C51.4 11 52 8.4 55 7.6 L55.8 9 C53.8 9.8 53.6 11.8 54.4 14.2 Z M55.4 15.2 C56 12.4 58.2 11 60.6 11.6 L60.4 13 C58.6 12.8 57.4 13.8 57 15.8 Z" />
+    <path d="M41.6 26 L44.4 26 L45 44 L42.2 44 Z M46 25 L48.8 24.4 L49.2 44 L46.4 44 Z M11.4 27 L14.2 27.6 L13.8 44 L11 44 Z M16 28 L18.8 28.4 L18.8 44 L16 44 Z" />
+    <path d="M8.6 18 C6 22 5 27 4.6 31 L3 34.4 L6.2 34 L6.6 30.6 C7 27 7.8 23 9.6 20 Z" />
+  </symbol>
+
+  <!-- Elephant walking, trunk down, ear out -->
+  <symbol id="wild-elephant" viewBox="0 0 90 64">
+    <path d="M10 28 C10 16 20 9.6 34 9.6 L56 10.6 C62 11 66.4 16 66.4 24 C66.4 34 62 42 56 44 L18 44 C12 42 10 36 10 28 Z" />
+    <path d="M57 15 C61 8.4 71 6.8 77.6 9.6 C84 12.6 86.4 19.6 85.2 26.6 C84.4 31.4 82.4 34.4 80 36.4 L60 38 Z" />
+    <path d="M79.4 29 C81.8 37 81.8 45 82.8 51.6 C83.2 55 84.8 57 87 58 L86.2 60.6 C82.6 60.2 80.2 57 79.8 53 C79 47 77.4 41 74.6 36 Z" />
+    <path d="M61.6 38 L70 38 L70.6 64 L62.6 64 Z M52.8 40 L60 40 L59.6 64 L53 64 Z M13.6 36 L22 39 L21 64 L14 64 Z M24 40 L30.4 40.4 L30 64 L24 64 Z" />
+    <path d="M10.6 24 C8.4 29 7.6 34 7.4 39 L5.8 42.6 L8.8 42.2 L9.4 38.6 C9.8 34 10.6 30 12 27 Z" />
+  </symbol>
+
+  <!-- Safari Land Cruiser with the roof popped up -->
+  <symbol id="wild-car" viewBox="0 0 120 56">
+    <path d="M22 6 L92 6 L94 10 L20 10 Z" />
+    <path d="M24 10 L26 10 L27 20 L25 20 Z M58 10 L60 10 L60 20 L58 20 Z M88 10 L90 10 L91 20 L89 20 Z" />
+    <path d="M8 26 C8 22 12 20 16 20 L94 20 C96 20 98 21 99 23 L106 32 L114 33.4 C117 34 118.4 36 118.4 39 L118.4 44 C118.4 46 117 47 115 47 L104 47 C103 41 98 37 92 37 C86 37 81 41 80 47 L42 47 C41 41 36 37 30 37 C24 37 19 41 18 47 L10 47 C8.6 47 8 46 8 44.6 Z" />
+    <path d="M4 28 C1.6 28 0.6 30 0.6 33 L0.6 41 C0.6 44 1.6 45 4 45 L7 45 L7 28 Z" />
+    <circle cx="30" cy="47" r="8.6" />
+    <circle cx="92" cy="47" r="8.6" />
+  </symbol>
+
+  <!-- A flat-topped hill line, for the far distance -->
+  <symbol id="wild-hills" viewBox="0 0 600 60" preserveAspectRatio="none">
+    <path d="M0 60 L0 44 C40 40 70 30 110 31 C150 32 170 22 210 20 C240 18 260 26 300 30 C350 34 380 24 420 18 C450 14 480 22 510 30 C540 37 570 36 600 38 L600 60 Z" />
+  </symbol>
+</svg>
+
+<style>
+  .wild-symbols { position: absolute; width: 0; height: 0; overflow: hidden; }
+</style>

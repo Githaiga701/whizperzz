@@ -846,7 +846,7 @@ body { top: 0 !important; }
 }
 .faq-list details[open] summary::after { transform: rotate(45deg); }
 .faq-list details p { color: var(--muted); margin: 0 0 22px; }
-@media (max-width: 760px) { .faq { grid-template-columns: 1fr; } }
+@media (max-width: 1000px) { .faq { grid-template-columns: 1fr; } }
 
 /* ---------- Filters ---------- */
 

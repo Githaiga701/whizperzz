@@ -1,0 +1,53 @@
+---
+/**
+ * A strip of savannah skyline: far hills, acacias, a termite mound and animals, one of them walking.
+ * "paper": bark-brown ink on the light paper (inner page tops). "night": near-black land under the footer's sky.
+ * Pure scenery, hidden from screen readers. Uses the shapes in WildSymbols.astro.
+ */
+interface Props {
+  tone?: 'paper' | 'night';
+  class?: string;
+}
+const { tone = 'paper', class: className } = Astro.props;
+
+// [symbol, x, width, height] laid on a 1440 × 110 stage, standing on y = 110.
+const near: [string, number, number, number][] = [
+  ['acacia', 40, 170, 109],
+  ['bush', 200, 70, 30],
+  ['mound', 268, 24, 32],
+  ['acacia', 560, 120, 77],
+  ['bush', 680, 54, 23],
+  ['elephant', 820, 66, 47],
+  ['elephant', 882, 46, 33],
+  ['bush', 1010, 60, 26],
+  ['acacia', 1110, 200, 128],
+  ['mound', 1330, 20, 27],
+  ['bush', 1360, 80, 34],
+];
+const far: [string, number, number, number][] = [
+  ['acacia', 360, 64, 41],
+  ['acacia', 470, 44, 28],
+  ['giraffe', 420, 26, 41],
+  ['acacia', 960, 54, 35],
+  ['acacia', 1290, 40, 26],
+];
+---
+
+<div class:list={['horizon', `horizon--${tone}`, className]} aria-hidden="true">
+  <svg viewBox="0 0 1440 110" preserveAspectRatio="xMidYMax slice" focusable="false">
+    <g class="horizon-far">
+      <use href="#wild-hills" x="0" y="64" width="1440" height="46" />
+      {far.map(([s, x, w, h]) => <use href={`#wild-${s}`} x={x} y={92 - h} width={w} height={h} />)}
+    </g>
+    <g class="horizon-near">
+      <path d="M0 110 L0 100 C120 96 260 102 420 99 C600 95 760 103 940 100 C1120 97 1280 102 1440 99 L1440 110 Z" />
+      {near.map(([s, x, w, h]) => <use href={`#wild-${s}`} x={x} y={102 - h} width={w} height={h} />)}
+    </g>
+    <!-- A small group of giraffes crossing, slowly -->
+    <g class="horizon-walkers">
+      <g class="walker"><use href="#wild-giraffe" x="0" y="34" width="44" height="68" /></g>
+      <g class="walker walker--b"><use href="#wild-giraffe" x="-56" y="48" width="34" height="53" /></g>
+      <g class="walker walker--c"><use href="#wild-giraffe" x="-96" y="62" width="25" height="39" /></g>
+    </g>
+  </svg>
+</div>

@@ -25,6 +25,11 @@ const headline = 'Find your way into the wild.'.split(' ');
 const quote = 'A safari should feel less like a checklist and more like being let in.'.split(' ');
 const marquee = destinations.map((d) => d.data.name);
 import Partners from '@/components/Partners.astro';
+import Stamp from '@/components/Stamp.astro';
+// Dust in the low sun: [left %, start %, size px, seconds, delay s]
+const motes = [[8, 70, 3, 14, 0], [14, 40, 2, 18, 3], [22, 85, 4, 16, 6], [31, 55, 2, 20, 1], [38, 75, 3, 15, 9], [46, 30, 2, 22, 4], [53, 65, 3, 17, 11], [61, 88, 2, 19, 2], [68, 48, 4, 16, 7], [74, 72, 2, 21, 5], [81, 36, 3, 18, 12], [88, 80, 2, 15, 8], [93, 58, 3, 20, 10], [4, 50, 2, 17, 13]];
+// The herd crossing under the place names: [symbol, gap after it, size %]
+const herd: [string, number, number][] = [['gnu', 18, 100], ['gnu', 6, 86], ['gnu', 26, 94], ['gnu', 8, 80], ['gnu', 40, 100], ['elephant', 10, 120], ['elephant', 50, 92], ['gnu', 12, 90], ['gnu', 5, 100], ['gnu', 30, 84], ['giraffe', 60, 130], ['gnu', 14, 96], ['gnu', 9, 88]];
 ---
 
 <Base title={site.name} heroImage={heroImage} heroSizes="100vw">
@@ -39,6 +44,9 @@ import Partners from '@/components/Partners.astro';
         </g>
       ))}
     </svg>
+    <div class="motes" aria-hidden="true">
+      {motes.map(([x, y, size, t, d]) => <i style={`--x:${x}%;--y:${y}%;--s:${size}px;--t:${t}s;--d:-${d}s`} />)}
+    </div>
     <NoteCycle class="hero-whisper" notes={fieldNotes} tilt={2} />
     <div class="wrap">
       <h1 class="hero-title" aria-label={headline.join(' ')}>
@@ -58,7 +66,13 @@ import Partners from '@/components/Partners.astro';
 
   <section class="section">
     <div class="wrap intro">
-      <h2 data-reveal><span class="line">Come for the wild.</span> <span class="line">Stay for the feeling.</span></h2>
+      <div class="intro-head">
+        <h2 data-reveal><span class="line">Come for the wild.</span> <span class="line">Stay for the feeling.</span></h2>
+        <p class="pencil-note" aria-hidden="true" data-reveal>
+          <svg viewBox="0 0 120 70" focusable="false"><path class="pencil-stroke" d="M112 6 C92 10 70 22 58 40 C50 52 40 60 14 62 M14 62 L26 54 M14 62 L25 69" /></svg>
+          <span>we drive out at first light,<br />before the heat and the crowds</span>
+        </p>
+      </div>
       <div>
         <p class="lede">We think the best journeys have room to breathe. So we bring together Kenya’s wide-open landscapes, local guides who know them well and stays that feel like they belong, then leave space for the unexpected.</p>
         <a class="link" href="/about/">Read our story</a>
@@ -72,6 +86,17 @@ import Partners from '@/components/Partners.astro';
   </section>
 
   <div class="marquee" aria-hidden="true">
+    <div class="herd">
+      {[0, 1].map(() => (
+        <div class="herd-run">
+          {herd.map(([sym, gap, size], i) => (
+            <svg class={`beast beast--${sym}`} style={`--gap:${gap}px;--k:${size / 100};--b:${(i % 4) * 0.13}s`} viewBox={sym === 'gnu' ? '0 0 64 44' : sym === 'elephant' ? '0 0 90 64' : '0 0 64 100'} focusable="false">
+              <use href={`#wild-${sym}`} />
+            </svg>
+          ))}
+        </div>
+      ))}
+    </div>
     <div class="marquee-track">
       {[0, 1].map(() => (
         <ul>
@@ -83,9 +108,16 @@ import Partners from '@/components/Partners.astro';
     </div>
   </div>
 
-  <section class="section section--deep" aria-labelledby="where-title">
+  <section class="section section--deep" aria-labelledby="where-title" data-terrain style="--tear-above: var(--bark)">
     <div class="wrap where">
       <div class="where-map">
+        <svg class="compass" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+          <circle cx="50" cy="50" r="30" />
+          <circle cx="50" cy="50" r="22" />
+          <path class="compass-n" d="M50 8 L56 50 L50 44 L44 50 Z" />
+          <path d="M50 92 L56 50 L50 56 L44 50 Z M8 50 L50 44 L44 50 L50 56 Z M92 50 L50 44 L56 50 L50 56 Z" opacity=".55" />
+          <text x="50" y="6" text-anchor="middle">N</text>
+        </svg>
         <KenyaMap pins={destinations.map(toPin)} mode="links" uid="home" label="Map of Kenya showing the places we travel to" />
       </div>
       <div>
@@ -182,7 +214,8 @@ import Partners from '@/components/Partners.astro';
     </div>
   </section>
 
-  <section class="section section--deep cta-band">
+  <section class="section section--deep cta-band" data-terrain>
+    <Stamp class="cta-stamp" />
     <div class="wrap" data-reveal>
       <h2>Tell us where you’d like to wake up.</h2>
       <div class="button-row">
