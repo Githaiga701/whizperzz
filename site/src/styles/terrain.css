@@ -13,6 +13,11 @@
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .17 0 0 0 0 .12 0 0 0 0 .07 0 0 0 .2 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   /* Paper fibres and speckles: short pale and dark flecks scattered like on recycled paper. */
   --fibres: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cg stroke-linecap='round' fill='none'%3E%3Cg stroke='%235a4630' stroke-opacity='.16' stroke-width='.8'%3E%3Cpath d='M20 30l9 3M140 18l6 7M250 60l-8 4M60 140l10-2M200 170l7 5M90 250l-9 3M280 230l5 8M170 280l9-1M30 210l4 7M120 95l7-4'/%3E%3C/g%3E%3Cg stroke='%23fff8e6' stroke-opacity='.5' stroke-width='1.1'%3E%3Cpath d='M75 60l12 2M220 110l-6 9M40 280l11-3M160 210l8 6M260 290l-10 1M110 170l5-8'/%3E%3C/g%3E%3C/g%3E%3Cg fill='%235a4630' fill-opacity='.18'%3E%3Ccircle cx='48' cy='92' r='.9'/%3E%3Ccircle cx='190' cy='40' r='.7'/%3E%3Ccircle cx='236' cy='196' r='1'/%3E%3Ccircle cx='96' cy='212' r='.8'/%3E%3Ccircle cx='150' cy='130' r='.6'/%3E%3Ccircle cx='280' cy='120' r='.8'/%3E%3C/g%3E%3C/svg%3E");
+  /* Sun-faded paper: big soft patches of ochre and of sage, like a page left on the dashboard of the car. */
+  --sunfade: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900'%3E%3Cfilter id='m' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.0032' numOctaves='4' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .72 0 0 0 0 .5 0 0 0 0 .2 1.05 0 0 0 -.47'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)'/%3E%3C/svg%3E");
+  --sagefade: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1100' height='1100'%3E%3Cfilter id='m' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.0026' numOctaves='3' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .44 0 0 0 0 .5 0 0 0 0 .3 0 1 0 0 -.47'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)'/%3E%3C/svg%3E");
+  /* Faint tracks of a lion, an elephant and a guineafowl across the page (scripts/make-tracks.py). */
+  --tracks: url('/textures/tracks.svg') 0 0 / 1400px 1400px;
   --tear-edge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 14' preserveAspectRatio='none'%3E%3Cpath d='M0 0 H600 V5.3 L592 9.9 L586 4.4 L578 8.6 L570 7.5 L561 6.7 L553 9.4 L544 7.9 L538 8.3 L532 5.5 L518 6.6 L510 8.2 L501 7.2 L490 10.0 L479 7.5 L465 7.4 L457 9.1 L451 9.6 L445 3.0 L439 3.8 L431 3.5 L423 6.4 L417 5.7 L403 9.3 L392 7.6 L378 7.8 L370 5.6 L356 7.0 L347 6.4 L341 4.1 L333 9.7 L322 9.9 L311 9.0 L300 6.9 L286 3.6 L275 5.8 L267 10.4 L259 7.3 L251 3.2 L242 8.0 L233 10.0 L219 3.4 L213 9.6 L207 7.1 L196 5.4 L187 8.4 L181 9.5 L173 5.9 L159 9.3 L150 9.1 L139 3.6 L131 5.1 L122 6.3 L113 7.8 L102 7.0 L96 5.6 L88 3.7 L80 5.2 L66 5.9 L57 3.3 L49 7.0 L43 7.4 L35 10.8 L29 4.7 L23 3.3 L15 7.1 L6 3.5 L0 5.3 Z'/%3E%3C/svg%3E");
   --night: #1a130d;
   --night-land: #0f0b07;
@@ -23,7 +28,7 @@
 
 /* ---------- Paper ---------- */
 
-body { background: var(--fibres), var(--grain), var(--canvas); }
+body { background: var(--fibres), var(--grain), var(--tracks), var(--sagefade), var(--sunfade), var(--canvas); }
 .site-header { background: var(--grain), var(--paper); }
 
 /* The deeper sheets and the plain page tops carry a survey map printed faintly into the paper. */
