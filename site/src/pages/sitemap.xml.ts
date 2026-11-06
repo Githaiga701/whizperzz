@@ -4,7 +4,7 @@ import { getPackageStore } from '@/lib/server/packages';
 import { getDestinations } from '@/lib/content';
 
 /** Every public page, for search engines. Journeys come from the admin, so new or hidden ones update by themselves. */
-const PAGES = ['/', '/destinations/', '/packages/', '/how-to-book/', '/plan/', '/gallery/', '/about/', '/faq/', '/contact/', '/privacy/'];
+const PAGES = ['/', '/destinations/', '/packages/', '/how-to-book/', '/plan/', '/gallery/', '/about/', '/faq/', '/contact/', '/terms/', '/refund-policy/', '/privacy/'];
 
 export const GET: APIRoute = async () => {
   const site = getRuntime().deps.config.siteUrl;

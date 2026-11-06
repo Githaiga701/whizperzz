@@ -1,0 +1,133 @@
+---
+/**
+ * A small bar at the bottom of the page when the connection drops. It appears when a real request fails to
+ * connect (or the browser says it's offline), keeps checking with growing gaps, and says "Back online" when a
+ * check gets through. Nothing on the page is cleared while offline.
+ */
+interface Props {
+  /** What still works while offline, in a few words. */
+  note?: string;
+}
+const { note = 'You can keep reading this page.' } = Astro.props;
+---
+
+<div class="net-banner" data-net-banner hidden role="status" aria-live="polite">
+  <svg class="net-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0M5.5 12a10 10 0 0 1 13 0M9 15.5a5 5 0 0 1 6 0" /><path d="M12 19.5h.01" stroke-width="2.6" stroke-linecap="round" /><path d="m3 3 18 18" /></svg>
+  <p>
+    <strong data-net-title>You’re offline.</strong>
+    <span data-net-text>{note} <span data-net-retrying>Reconnecting…</span></span>
+  </p>
+  <button type="button" class="net-retry" data-net-retry>Try now</button>
+</div>
+
+<script>
+  import { backoff, onConnectivity, reportConnectivity } from '@/lib/client/network';
+
+  const bar = document.querySelector<HTMLElement>('[data-net-banner]');
+  if (bar) {
+    const title = bar.querySelector<HTMLElement>('[data-net-title]')!;
+    const text = bar.querySelector<HTMLElement>('[data-net-text]')!;
+    const retryBtn = bar.querySelector<HTMLButtonElement>('[data-net-retry]')!;
+    const textHtml = text.innerHTML;
+    let attempt = 0;
+    let timer: number | undefined;
+    let hideTimer: number | undefined;
+    let checking = false;
+
+    /** One real request to our own server: the only reliable test of "back online". */
+    async function probe() {
+      if (checking) return;
+      checking = true;
+      window.clearTimeout(timer);
+      retryBtn.disabled = true;
+      try {
+        const ctrl = new AbortController();
+        const t = window.setTimeout(() => ctrl.abort(), 8000);
+        const res = await fetch('/api/health', { cache: 'no-store', signal: ctrl.signal });
+        window.clearTimeout(t);
+        reportConnectivity(res.status < 600);
+      } catch {
+        attempt++;
+        timer = window.setTimeout(probe, backoff(attempt));
+      } finally {
+        checking = false;
+        retryBtn.disabled = false;
+      }
+    }
+
+    function showOffline() {
+      window.clearTimeout(hideTimer);
+      bar!.dataset['state'] = 'offline';
+      title.textContent = 'You’re offline.';
+      text.innerHTML = textHtml;
+      retryBtn.hidden = false;
+      bar!.hidden = false;
+      attempt = 0;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(probe, backoff(0));
+    }
+
+    function showOnline() {
+      window.clearTimeout(timer);
+      if (bar!.hidden) return;
+      bar!.dataset['state'] = 'online';
+      title.textContent = 'Back online.';
+      text.textContent = '';
+      retryBtn.hidden = true;
+      hideTimer = window.setTimeout(() => (bar!.hidden = true), 2500);
+    }
+
+    onConnectivity((up) => (up ? showOnline() : showOffline()));
+    retryBtn.addEventListener('click', () => {
+      attempt = 0;
+      void probe();
+    });
+    // The browser's own signal is a hint: going offline is believable; "online" is checked with a real request.
+    window.addEventListener('offline', () => reportConnectivity(false));
+    window.addEventListener('online', () => void probe());
+    if (navigator.onLine === false) reportConnectivity(false);
+  }
+</script>
+
+<style>
+  .net-banner {
+    position: fixed;
+    left: 50%;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 60;
+    width: min(560px, calc(100% - 24px));
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px 12px 16px;
+    background: var(--bark);
+    color: var(--on-dark);
+    border-radius: var(--radius);
+    box-shadow: 0 10px 30px rgba(42, 32, 23, 0.28);
+    font-size: 0.9375rem;
+    line-height: 1.4;
+  }
+  .net-banner[hidden] { display: none; }
+  .net-banner p { margin: 0; flex: 1; }
+  .net-banner[data-state='online'] .net-icon { display: none; }
+  .net-icon { flex: none; color: var(--grass-soft); }
+  .net-retry {
+    flex: none;
+    min-height: 40px;
+    padding: 6px 14px;
+    border: 1px solid rgba(239, 230, 210, 0.45);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--on-dark);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .net-retry:hover { background: rgba(239, 230, 210, 0.12); }
+  .net-retry:disabled { opacity: 0.6; cursor: progress; }
+  .net-retry[hidden] { display: none; }
+  @media (prefers-reduced-motion: no-preference) {
+    .net-banner:not([hidden]) { animation: net-in 0.25s ease-out; }
+    @keyframes net-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+  }
+</style>

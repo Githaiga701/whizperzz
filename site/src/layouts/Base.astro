@@ -11,6 +11,7 @@ import Header from '@/components/Header.astro';
 import Footer from '@/components/Footer.astro';
 import ContactDock from '@/components/ContactDock.astro';
 import WildSymbols from '@/components/WildSymbols.astro';
+import NetworkBanner from '@/components/NetworkBanner.astro';
 import { site } from '@/config/site';
 import { imageAt, responsive } from '@/lib/images';
 // The three fonts the first screen paints with. Preloading them avoids a flash of fallback text.
@@ -76,6 +77,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     </main>
     <Footer />
     {contactDock && <ContactDock />}
+    <NetworkBanner />
     <script>
       import '@/scripts/motion';
       import '@/scripts/terrain';

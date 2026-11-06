@@ -1,0 +1,67 @@
+---
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import { site } from '@/config/site';
+import { prettyPhone } from '@/lib/enquiry';
+import { getRuntime } from '@/lib/server/payments';
+
+// The deposit is set in Admin → Settings → Online booking, so the terms always match what checkout asks for.
+const deposit = getRuntime().booking.depositPercent;
+const takesDeposits = deposit > 0 && deposit < 100;
+---
+
+<Base title="Terms & conditions" description="The terms for booking a safari or holiday with Whizperz Tours & Safaris: prices, payment, changes, cancellations and your responsibilities.">
+  <PageHero title="Terms & conditions." intro="Last updated 5 November 2026." />
+  <section class="section" style="padding-top:0">
+    <div class="wrap prose">
+      <p>These terms apply to every trip booked with {site.legalName} (Company No. {site.companyNo}), trading as {site.name} (“we”, “us”), whether you book on this website, through a payment link we send you, or directly with our team. Please read them together with our <a class="link" href="/refund-policy/">Refund &amp; cancellation policy</a> and <a class="link" href="/privacy/">Privacy policy</a>. By paying for a booking you confirm that you have read and accept them on behalf of everyone travelling with you.</p>
+
+      <h2>1. Your booking</h2>
+      <p>A booking is confirmed once we have received your payment ({takesDeposits ? 'the deposit or the full amount' : 'the full amount'}) and sent you a booking reference. Your booking reference, the trip details and the price on your quote or confirmation form part of our agreement with you. The person who makes the booking must be at least 18 and is responsible for passing these terms on to everyone in the group.</p>
+
+      <h2>2. Prices</h2>
+      <p>Prices are quoted in Kenyan shillings (KES) and, where shown, in US dollars. Each journey page or quote says what is included, usually transport in a safari vehicle, a driver-guide, accommodation, meals as listed and park entry fees. Unless stated, prices do not include international or domestic flights, visas, travel insurance, tips, drinks, optional activities or personal expenses.</p>
+      <p>Once your booking is confirmed we will not increase the price, except where a government body (such as Kenya Wildlife Service, a county government or the national government) introduces or raises park fees, conservancy fees or taxes before you travel. We will tell you about any such change as soon as we know, with evidence of it.</p>
+
+      <h2>3. Paying</h2>
+      {
+        takesDeposits ? (
+          <p>To confirm a booking you can pay a <strong>{deposit}% deposit</strong> or the full amount. The balance is due <strong>no later than 30 days before your trip starts</strong>; we will send you a link to pay it. Bookings made less than 30 days before travel must be paid in full. If the balance isn’t paid on time, we may treat the booking as cancelled by you, and the cancellation charges in our refund policy apply.</p>
+        ) : (
+          <p>Bookings are paid in full when you book.</p>
+        )
+      }
+      <p>You can pay by M-Pesa, by card, by PayPal, by bank transfer or by cryptocurrency, depending on which methods are shown at checkout. Payments are handled by licensed providers (Safaricom, Pesapal, Paystack, PayPal and others); we never see your M-Pesa PIN or full card details. Payments in US dollars are converted from the shilling price at the rate shown at checkout. Your bank or card issuer may charge its own fees.</p>
+
+      <h2>4. Changes you ask for</h2>
+      <p>If you want to change your dates, route or group size, tell us in writing (email or WhatsApp) as early as you can. We will do our best to help, subject to availability. Where a change costs more (for example, a lodge charges a higher rate), you pay the difference. Our <a class="link" href="/refund-policy/">refund policy</a> explains when a change is free and when it counts as a cancellation.</p>
+
+      <h2>5. If you cancel</h2>
+      <p>You can cancel at any time by telling us in writing. The cancellation charges and how refunds are paid are set out in our <a class="link" href="/refund-policy/">Refund &amp; cancellation policy</a>.</p>
+
+      <h2>6. If we change or cancel your trip</h2>
+      <p>Occasionally we may need to change part of a trip, for example if a lodge is unavailable, a road is closed or a park changes its rules. We will replace it with something of a similar or better standard at no extra cost and tell you as soon as possible. If we have to make a major change, or cancel your trip for a reason other than one beyond our control (see section 10), you can choose another trip or a full refund of everything you have paid us.</p>
+
+      <h2>7. Travel documents, health and insurance</h2>
+      <p>You are responsible for having a valid passport, any visa or electronic travel authorisation needed to enter Kenya, and any vaccinations or medication your doctor or the authorities recommend (for example, yellow fever or malaria prevention). We strongly recommend travel insurance that covers cancellation, medical treatment and emergency evacuation. Please tell us before you travel about any medical condition, disability or dietary need we should plan for.</p>
+
+      <h2>8. On the trip</h2>
+      <p>Wildlife is wild. For your safety you must follow the instructions of your guide, park rangers and lodge staff, stay in the vehicle in parks unless told otherwise, and respect park rules and local communities. We may end the trip of anyone whose behaviour puts others at risk or breaks the law, without a refund. Game viewing depends on nature, so we cannot promise you will see particular animals.</p>
+
+      <h2>9. Our responsibility to you</h2>
+      <p>We are responsible for arranging your trip with reasonable care and skill. Some services, such as lodges, hotels, airlines and activity operators, are provided by independent suppliers under their own terms. We are not liable for loss, injury or damage caused by you, by someone in your group, by a third party unconnected with your trip, or by events beyond our control. Nothing in these terms limits any rights you have under the Consumer Protection Act, 2012 or other Kenyan law.</p>
+
+      <h2>10. Events beyond our control</h2>
+      <p>We are not responsible for failing to provide all or part of a trip because of events beyond our control, such as severe weather, floods, natural disasters, epidemics, civil unrest, strikes, government action or the closure of parks or airports. If such an event stops a trip from going ahead, we will offer you new dates or a credit for a future trip, or refund what you have paid less any costs we cannot recover from suppliers.</p>
+
+      <h2>11. Complaints</h2>
+      <p>If something isn’t right during your trip, tell your guide or call us straight away so we can try to fix it there and then. If it can’t be resolved, write to us within 28 days of returning and we will reply within 14 days.</p>
+
+      <h2>12. Law</h2>
+      <p>These terms are governed by the laws of Kenya, and the courts of Kenya have jurisdiction over any dispute.</p>
+
+      <h2>Contact</h2>
+      <p>{site.legalName}, {site.contact.postal}. Email <a class="link" href={`mailto:${site.contact.email}`}>{site.contact.email}</a> or call {prettyPhone(site.contact.phones[0] ?? '')}.</p>
+    </div>
+  </section>
+</Base>

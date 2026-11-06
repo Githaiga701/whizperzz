@@ -18,7 +18,9 @@ export interface SiteContact {
 export const site = {
   name: 'Whizperz Tours & Safaris',
   /** The registered company; the site trades under `name`. Shown in the footer copyright and the privacy policy. */
-  legalName: 'Whizperz Dawn Tours',
+  legalName: 'Whizperz Dawn Tours Limited',
+  /** Registration number on the certificate of incorporation (Companies Act, 2015). */
+  companyNo: 'PVT-L51MKKA6',
   shortName: 'Whizperz',
   motto: 'Good journeys leave a little wild in you.',
   description:

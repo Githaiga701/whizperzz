@@ -14,7 +14,7 @@ const SIZES = [
   { name: 'desktop', width: 1440, height: 900 },
 ];
 
-const PAGES = ['/', '/destinations/', '/destinations/amboseli/', '/packages/', '/packages/wild-to-blue/', '/plan/', '/gallery/', '/about/', '/contact/', '/faq/', '/how-to-book/', '/privacy/'];
+const PAGES = ['/', '/destinations/', '/destinations/amboseli/', '/packages/', '/packages/wild-to-blue/', '/plan/', '/gallery/', '/about/', '/contact/', '/faq/', '/how-to-book/', '/privacy/', '/terms/', '/refund-policy/'];
 
 test.beforeEach(({}, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'Sets its own screen sizes');

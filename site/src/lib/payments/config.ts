@@ -520,7 +520,17 @@ export interface BookingConfig {
   depositPercent: number;
   /** How many days ahead the earliest travel date must be. */
   leadDays: number;
+  /** The public Make a payment page (/pay/), where guests type the amount. undefined = switched off. */
+  openPay?: OpenPayConfig | undefined;
 }
+
+export interface OpenPayConfig {
+  minKes: number;
+  maxKes: number;
+}
+
+export const OPEN_PAY_DEFAULT_MIN_KES = 500;
+export const OPEN_PAY_DEFAULT_MAX_KES = 2_000_000;
 
 export function loadBookingConfig(raw: Record<string, string | undefined>): BookingConfig {
   const pct = Number(raw['DEPOSIT_PERCENT'] ?? 30);
@@ -528,5 +538,18 @@ export function loadBookingConfig(raw: Record<string, string | undefined>): Book
   return {
     depositPercent: Number.isInteger(pct) && pct >= 0 && pct <= 100 ? pct : 30,
     leadDays: Number.isInteger(lead) && lead >= 0 && lead <= 365 ? lead : 3,
+    openPay: loadOpenPay(raw),
   };
+}
+
+function loadOpenPay(raw: Record<string, string | undefined>): OpenPayConfig | undefined {
+  if (raw['OPEN_PAY']?.trim().toLowerCase() !== 'on') return undefined;
+  const whole = (v: string | undefined, fallback: number) => {
+    const n = Number(v?.trim() || NaN);
+    return Number.isInteger(n) && n >= 1 && n <= 50_000_000 ? n : fallback;
+  };
+  const minKes = whole(raw['OPEN_PAY_MIN_KES'], OPEN_PAY_DEFAULT_MIN_KES);
+  const maxKes = whole(raw['OPEN_PAY_MAX_KES'], OPEN_PAY_DEFAULT_MAX_KES);
+  // A lowest amount above the highest is a typo: keep the page working with the defaults rather than refusing everyone.
+  return minKes <= maxKes ? { minKes, maxKes } : { minKes: OPEN_PAY_DEFAULT_MIN_KES, maxKes: OPEN_PAY_DEFAULT_MAX_KES };
 }

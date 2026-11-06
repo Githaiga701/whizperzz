@@ -1,0 +1,69 @@
+---
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import { site } from '@/config/site';
+import { prettyPhone } from '@/lib/enquiry';
+---
+
+<Base title="Refund & cancellation policy" description="How cancellations, date changes and refunds work for trips booked with Whizperz Tours & Safaris.">
+  <PageHero title="Refund & cancellation policy." intro="Last updated 5 November 2026." />
+  <section class="section" style="padding-top:0">
+    <div class="wrap prose">
+      <p>This policy explains what happens if you need to cancel or change a trip booked with {site.legalName}, trading as {site.name}. It forms part of our <a class="link" href="/terms/">Terms &amp; conditions</a>.</p>
+
+      <h2>How to cancel</h2>
+      <p>Tell us in writing by email to <a class="link" href={`mailto:${site.contact.email}`}>{site.contact.email}</a> or by WhatsApp, quoting your booking reference. The cancellation takes effect on the day we receive your message, and we will confirm it in writing.</p>
+
+      <h2>Cancellation charges</h2>
+      <p>The charge depends on how long before your trip starts we receive your cancellation. It is a percentage of the total trip price:</p>
+      <div class="table-wrap">
+        <table class="policy-table">
+          <thead>
+            <tr><th scope="col">When you cancel</th><th scope="col">Charge</th><th scope="col">You get back</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>60 days or more before travel</td><td>10%</td><td>90% of the trip price</td></tr>
+            <tr><td>30 to 59 days before travel</td><td>50%</td><td>50% of the trip price</td></tr>
+            <tr><td>Less than 30 days before travel, or not turning up</td><td>100%</td><td>Nothing</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>We never charge more than you have paid, so if you have only paid a deposit and the charge is higher, you won’t owe us the difference. If you have paid more than the charge, we refund the rest.</p>
+      <p><strong>Costs we can’t recover.</strong> Some costs are paid to suppliers on your behalf and cannot be refunded, such as flights, special activities booked for you (for example a balloon safari), and lodge bookings with non-refundable rates. These are deducted from any refund in addition to the charge above. We will tell you when you book if any part of your trip is non-refundable.</p>
+
+      <h2>Changing your dates</h2>
+      <p>You can move your trip to new dates <strong>once without a fee</strong> if you ask at least 30 days before travel, subject to availability. You pay any difference in price for the new dates. A change requested less than 30 days before travel, or a second change, is treated as a cancellation and rebooking.</p>
+
+      <h2>Swapping a traveller</h2>
+      <p>If someone in your group can’t travel, you can transfer their place to another person at no charge if you tell us at least 14 days before travel, provided the lodges and airlines allow it. Any name-change fees they charge are passed on at cost.</p>
+
+      <h2>If we cancel</h2>
+      <p>If we cancel your trip for any reason other than an event beyond our control, you get a <strong>full refund</strong> of everything you have paid us, or a different trip if you prefer. If a park closure, severe weather, unrest or another event beyond our control stops your trip, we offer new dates or a credit for a future trip, or a refund less any costs we cannot recover from suppliers.</p>
+
+      <h2>Unused services</h2>
+      <p>We can’t refund parts of a trip you choose not to use once it has started, such as a missed game drive, an early departure or a meal skipped.</p>
+
+      <h2>How and when refunds are paid</h2>
+      <ul>
+        <li>We pay refunds within <strong>14 working days</strong> of confirming your cancellation.</li>
+        <li>Refunds go back <strong>the same way you paid</strong>: to the M-Pesa number, card, PayPal account or bank account used. Card and PayPal refunds can take a further 5 to 10 working days to show, depending on your bank.</li>
+        <li>Crypto payments are refunded in the same stablecoin or coin, for the US-dollar value you paid, to a wallet address you confirm in writing. Network fees for the refund are deducted.</li>
+        <li>Fees charged by payment providers and banks that we can’t recover may be deducted. We will show them on your refund confirmation.</li>
+      </ul>
+
+      <h2>Before disputing a payment</h2>
+      <p>If you think you’re owed a refund, please contact us first. Most problems can be sorted out quickly, and a card chargeback or payment dispute can take weeks longer than a direct refund.</p>
+
+      <h2>Contact</h2>
+      <p>Email <a class="link" href={`mailto:${site.contact.email}`}>{site.contact.email}</a> or call {prettyPhone(site.contact.phones[0] ?? '')}. Post: {site.contact.postal}.</p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .table-wrap { overflow-x: auto; margin: 0 0 1em; }
+  .policy-table { width: 100%; border-collapse: collapse; font-size: var(--step-0, 1rem); }
+  .policy-table th, .policy-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(42, 32, 23, 0.15); vertical-align: top; }
+  .policy-table thead th { font-weight: 600; border-bottom-width: 2px; }
+  .policy-table td:nth-child(2) { white-space: nowrap; font-weight: 600; }
+</style>

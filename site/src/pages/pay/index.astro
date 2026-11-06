@@ -1,0 +1,120 @@
+---
+import Base from '@/layouts/Base.astro';
+import PageHero from '@/components/PageHero.astro';
+import { getPaymentDeps, getRuntime } from '@/lib/server/payments';
+import { availableMethods } from '@/lib/packages/booking';
+import { formatKes, whatsappUrl } from '@/lib/enquiry';
+
+export const prerender = false;
+
+// "Make a payment": the guest types the amount. Switched on and limited in Admin → Settings → Online booking.
+const open = getRuntime().booking.openPay;
+const deps = getPaymentDeps();
+const rate = deps.config.usdRate;
+const anyMethod = Object.values(availableMethods(deps)).some(Boolean);
+const live = Boolean(open) && anyMethod;
+if (!live) Astro.response.status = 404;
+const help = whatsappUrl('Hello Whizperz, I’d like to make a payment.');
+const usdMin = open && rate ? Math.ceil((open.minKes / rate) * 100) / 100 : undefined;
+const usd = (n: number) => `USD ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const usdMax = open && rate ? Math.floor((open.maxKes / rate) * 100) / 100 : undefined;
+---
+
+<Base title="Make a payment" description="Pay Whizperz Tours & Safaris any amount: a deposit, a balance or a custom trip. M-Pesa, cards, PayPal or crypto." noindex={!live} contactDock={false}>
+  <PageHero title="Make a payment" intro="Paying a deposit, a balance or a trip we planned together? Enter the amount and choose how to pay." />
+
+  <section class="section" style="padding-top:0">
+    <div class="wrap contact-grid">
+      {
+        !live || !open ? (
+          <div>
+            <p class="lede">Online payments of any amount aren’t open right now. Message us and we’ll send you a payment link.</p>
+            {help && <a class="button button--whatsapp" href={help} target="_blank" rel="noopener noreferrer">Ask us on WhatsApp</a>}
+          </div>
+        ) : (
+          <>
+            <div class="pay-summary">
+              <p class="lede">You’ll get a reference for this payment, then choose M-Pesa, card, PayPal, crypto or another way that’s open.</p>
+              <dl class="facts">
+                <div><dt>From</dt><dd>{formatKes(open.minKes)}</dd></div>
+                <div><dt>Up to</dt><dd>{formatKes(open.maxKes)}</dd></div>
+                {rate && <div class="full"><dt>Paying in dollars</dt><dd>Converted at KES {rate} per US dollar.</dd></div>}
+              </dl>
+              <p class="form-note">If you’ve booked with us, put your booking reference in “What it’s for” so we can match it. We will never ask for your M-Pesa PIN or card details by phone, WhatsApp or email. By paying you agree to our <a class="link" href="/terms/">terms</a> and <a class="link" href="/refund-policy/">refund &amp; cancellation policy</a>.</p>
+            </div>
+
+            <form class="enquiry-form" data-open-pay data-min-kes={open.minKes} data-max-kes={open.maxKes} data-rate={rate}>
+              <h2 style="font-size:var(--step-2);margin:0">Your payment</h2>
+              <div class="two">
+                <label class="field">
+                  Currency
+                  <select name="currency">
+                    <option value="KES">Kenyan shillings (KES)</option>
+                    {rate && <option value="USD">US dollars (USD)</option>}
+                  </select>
+                </label>
+                <label class="field">
+                  Amount
+                  <input name="amount" type="number" inputmode="decimal" min="1" step="1" required placeholder={String(open.minKes)} data-amount />
+                </label>
+              </div>
+              <p class="form-note" data-range style="margin:0">From {formatKes(open.minKes)} to {formatKes(open.maxKes)}{usdMin !== undefined && usdMax !== undefined && <> (about {usd(usdMin)} to {usd(usdMax)})</>}.</p>
+              <label class="field">What it’s for <span class="hint">optional</span><input name="note" maxlength="120" placeholder="e.g. Balance for booking WZ-ABC123, Mara trip in March" /></label>
+              <div class="two">
+                <label class="field">Your name<input name="name" autocomplete="name" maxlength="80" required /></label>
+                <label class="field">Email for your receipt<input name="email" type="email" autocomplete="email" required /></label>
+              </div>
+              <label class="field">Phone <span class="hint">optional, Kenyan mobile</span><input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" /></label>
+              <button class="button" type="submit">Continue to payment</button>
+              <p class="form-status" data-status role="status" aria-live="polite"></p>
+            </form>
+          </>
+        )
+      }
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { OFFLINE, onReturn, readJson } from '@/lib/client/forms';
+
+  document.querySelectorAll<HTMLFormElement>('[data-open-pay]').forEach((form) => {
+    const status = form.querySelector<HTMLElement>('[data-status]')!;
+    const amount = form.querySelector<HTMLInputElement>('[data-amount]')!;
+    const currency = form.querySelector<HTMLSelectElement>('select[name="currency"]')!;
+    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+
+    // Shillings are whole numbers; dollars can have cents.
+    const syncStep = () => {
+      amount.step = currency.value === 'USD' ? '0.01' : '1';
+      amount.placeholder = currency.value === 'USD' ? '150.00' : form.dataset['minKes'] ?? '';
+    };
+    currency.addEventListener('change', syncStep);
+    syncStep();
+
+    const busy = (on: boolean) => {
+      form.setAttribute('aria-busy', String(on));
+      button.disabled = on;
+    };
+    onReturn(() => busy(false));
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(form)) as Record<string, string>;
+      busy(true);
+      status.textContent = 'Setting up your payment…';
+      try {
+        const res = await fetch('/api/pay/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        const body = await readJson<{ next?: string }>(res);
+        if (res.ok && body.next) {
+          location.href = body.next;
+          return;
+        }
+        status.textContent = body.message ?? 'Something went wrong. Please try again.';
+      } catch {
+        status.textContent = OFFLINE;
+      }
+      busy(false);
+    });
+  });
+</script>
